@@ -4,3 +4,10 @@ dist/
 *.log
 coverage/
 *.local
+
+# Environment & Secrets
+.env
+.env*
+*.env
+.env.local
+.env*.local
