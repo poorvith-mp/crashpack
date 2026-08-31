@@ -7,6 +7,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createCrashPack } from './index.js';
 import { renderMarkdown } from './render/markdown.js';
+import { loadConfig } from './config.js';
 
 interface CliArgs {
   wrap?: string;
@@ -59,11 +60,23 @@ function parseRegexPattern(pattern: string): RegExp | null {
   }
 }
 
-function extractGitHubRepo(remoteUrl?: string): string | null {
+function extractIssueUrl(remoteUrl?: string, projectName?: string, body?: string): { platform: 'GitHub' | 'GitLab'; url: string } | null {
   if (!remoteUrl) return null;
-  const match = remoteUrl.match(/github\.com[/:]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git|\/|$)/);
-  if (match && match[1] && match[2]) {
-    return `${match[1]}/${match[2]}`;
+  const ghMatch = remoteUrl.match(/github\.com[/:]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git|\/|$)/);
+  if (ghMatch && ghMatch[1] && ghMatch[2]) {
+    const repo = `${ghMatch[1]}/${ghMatch[2]}`;
+    return {
+      platform: 'GitHub',
+      url: `https://github.com/${repo}/issues/new?title=${encodeURIComponent(`[Bug]: Crash in ${projectName || 'repo'}`)}&body=${encodeURIComponent(body || '')}`,
+    };
+  }
+  const glMatch = remoteUrl.match(/gitlab\.com[/:]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git|\/|$)/);
+  if (glMatch && glMatch[1] && glMatch[2]) {
+    const repo = `${glMatch[1]}/${glMatch[2]}`;
+    return {
+      platform: 'GitLab',
+      url: `https://gitlab.com/${repo}/-/issues/new?issue[title]=${encodeURIComponent(`[Bug]: Crash in ${projectName || 'repo'}`)}&issue[description]=${encodeURIComponent(body || '')}`,
+    };
   }
   return null;
 }
@@ -83,13 +96,26 @@ export async function runCli(argv = process.argv): Promise<number> {
     .option('--no-clipboard', 'Skip copying to clipboard')
     .option('--lines <n>', 'Number of log lines to capture (default 200)', '200')
     .option('--since <duration>', 'Filter git commits and logs since duration (e.g. 1h, 1d)')
-    .option('--issue', 'Generate GitHub issue pre-fill URL for this repository')
+    .option('--issue', 'Generate GitHub or GitLab issue pre-fill URL for this repository')
     .option('--only <ids>', 'Comma-separated collector IDs to run')
     .option('--skip <ids>', 'Comma-separated collector IDs to skip')
     .option('--redact-extra <pattern...>', 'Additional regex pattern(s) to redact');
 
   program.parse(argv);
   const options = program.opts<CliArgs>();
+
+  // Merge defaults from .crashpackrc if present
+  const fileConfig = loadConfig();
+  if (fileConfig) {
+    if (!options.only && fileConfig.only) options.only = fileConfig.only.join(',');
+    if (!options.skip && fileConfig.skip) options.skip = fileConfig.skip.join(',');
+    if ((!options.redactExtra || options.redactExtra.length === 0) && fileConfig.redactExtra) {
+      options.redactExtra = fileConfig.redactExtra;
+    }
+    if (options.lines === '200' && fileConfig.lines) {
+      options.lines = String(fileConfig.lines);
+    }
+  }
 
   // 1. Handle --wrap mode
   if (options.wrap) {
@@ -267,15 +293,14 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     process.stderr.write(`${pc.cyan('│')}  ${pc.dim('⚡')} ${pc.magenta('Built by Poorvith')} ${pc.dim('· 100% local-first (0 network calls)')}\n`);
     process.stderr.write(`${pc.cyan('╰──────────────────────────────────────────────────────────────────────────╯')}\n\n`);
 
-    // Handle --issue flag: generate prefilled GitHub Issue URL
+    // Handle --issue flag: generate prefilled GitHub/GitLab Issue URL
     if (options.issue) {
       const gitSection = pack.sections.find((s) => s.id === 'git');
       const gitContent = gitSection?.content || '';
       const remoteMatch = gitContent.match(/Remote:\s*`([^`]+)`/);
-      const repoPath = extractGitHubRepo(remoteMatch ? remoteMatch[1] : undefined);
-      if (repoPath) {
-        const issueUrl = `https://github.com/${repoPath}/issues/new?title=${encodeURIComponent(`[Bug]: Crash in ${pack.projectName}`)}&body=${encodeURIComponent(markdown)}`;
-        process.stderr.write(`  ${pc.bold('🔗 GitHub Issue URL:')}\n  ${pc.underline(pc.cyan(issueUrl))}\n\n`);
+      const issueInfo = extractIssueUrl(remoteMatch ? remoteMatch[1] : undefined, pack.projectName, markdown);
+      if (issueInfo) {
+        process.stderr.write(`  ${pc.bold(`🔗 ${issueInfo.platform} Issue URL:`)}\n  ${pc.underline(pc.cyan(issueInfo.url))}\n\n`);
       }
     }
   }
