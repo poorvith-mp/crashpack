@@ -1,4 +1,5 @@
 import { CrashPack } from '../types.js';
+import { fenceFor } from './fence.js';
 
 export function renderMarkdown(pack: CrashPack): string {
   const durationSec = (pack.durationMs / 1000).toFixed(1);
@@ -19,7 +20,14 @@ export function renderMarkdown(pack: CrashPack): string {
     }
 
     if (section.status === 'ok' && section.content) {
-      sectionBlocks.push(`## ${section.title}\n\n${section.content}`);
+      // Logs are raw captured output: fence them so a crafted line cannot
+      // forge a heading or close the block (B-04).
+      if (section.id === 'logs') {
+        const fence = fenceFor(section.content);
+        sectionBlocks.push(`## ${section.title}\n\n${fence}\n${section.content}\n${fence}`);
+      } else {
+        sectionBlocks.push(`## ${section.title}\n\n${section.content}`);
+      }
     } else if (section.status === 'unavailable') {
       const reason = section.unavailableReason || 'not available';
       sectionBlocks.push(`## ${section.title}\n\n_Unavailable: ${reason}_`);

@@ -48,7 +48,8 @@ describe('Markdown Renderer', () => {
     expect(output).toContain('_2026-08-15 14:22 UTC · collected in 1.2s · 4 values redacted_');
 
     // Section assertions
-    expect(output).toContain('## Logs\n\n[last 200 lines, redacted]');
+    // Logs are fenced so captured output cannot forge markdown structure (B-04)
+    expect(output).toContain('## Logs\n\n```\n[last 200 lines, redacted]\n```');
     expect(output).toContain('## Git\n\n- Branch: `main`');
     expect(output).toContain('## Docker\n\n_Unavailable: daemon not running_');
 

@@ -1,5 +1,6 @@
 import { execa } from 'execa';
 import { asRawText, Collector, CollectorResult } from '../types.js';
+import { fenceFor } from '../render/fence.js';
 
 export const collectGit: Collector = async (ctx) => {
   const timeout = ctx.timeoutMs ?? 2000;
@@ -101,7 +102,9 @@ export const collectGit: Collector = async (ctx) => {
         finalDiff = diffLines.slice(0, 500);
         truncated = true;
       }
-      diffSection = `\n\n**Diff**\n\`\`\`diff\n${finalDiff.join('\n')}${truncated ? '\n... [diff truncated at 500 lines]' : ''}\n\`\`\``;
+      const diffBody = `${finalDiff.join('\n')}${truncated ? '\n... [diff truncated at 500 lines]' : ''}`;
+      const fence = fenceFor(diffBody);
+      diffSection = `\n\n**Diff**\n${fence}diff\n${diffBody}\n${fence}`;
     }
 
     const lines: string[] = [
