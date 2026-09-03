@@ -39,7 +39,7 @@ export interface Section {
   title: string;              // 'Logs', 'Git', etc.
   status: SectionStatus;
   content?: SafeText;         // markdown body, ALREADY REDACTED
-  unavailableReason?: string; // required when status === 'unavailable'
+  unavailableReason?: SafeText; // required when status === 'unavailable'; ALREADY REDACTED
   durationMs: number;
 }
 
