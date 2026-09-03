@@ -22,6 +22,7 @@ interface CliArgs {
   only?: string;
   skip?: string;
   redactExtra?: string[];
+  entropy?: boolean;
 }
 
 async function readStdin(): Promise<string> {
@@ -99,7 +100,8 @@ export async function runCli(argv = process.argv): Promise<number> {
     .option('--issue', 'Generate GitHub or GitLab issue pre-fill URL for this repository')
     .option('--only <ids>', 'Comma-separated collector IDs to run')
     .option('--skip <ids>', 'Comma-separated collector IDs to skip')
-    .option('--redact-extra <pattern...>', 'Additional regex pattern(s) to redact');
+    .option('--redact-extra <pattern...>', 'Additional regex pattern(s) to redact')
+    .option('--no-entropy', 'Disable the generic high-entropy token fallback');
 
   program.parse(argv);
   const options = program.opts<CliArgs>();
@@ -214,6 +216,7 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     only: onlyList,
     skip: skipList,
     redactExtra: extraPatterns,
+    entropy: options.entropy,
     onCollectorComplete: (id, status, reason) => {
       collectorStatuses[id] = { status, reason };
     },

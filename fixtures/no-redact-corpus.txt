@@ -1,0 +1,12 @@
+at Object.<anonymous> (/home/user/project/src/handlers/checkout.ts:42:15)
+commit a7353b8f2c1d4e6b9a0f3c5d7e8b1a2c4d6e8f0a
+d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3
+550e8400-e29b-41d4-a716-446655440000
+Error: ENOENT: no such file or directory, open '/var/folders/T/tmp-9823/build.log'
+    at async Module._load (node:internal/modules/cjs/loader:1023:12)
+next@15.0.3 react@19.0.0 @typescript-eslint/eslint-plugin@8.24.0
+Content-Hash: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+0x00007ffee3b4c8a0
+NODE_ENV=production PORT=3000 LOG_LEVEL=debug
+GET /api/v1/customers/cus_9999/subscriptions 404 12ms
+sha512-Yz3PqRk9m2vXbNc4dJfLqWtEhBgUoAiKsZv7TpMnQxCw

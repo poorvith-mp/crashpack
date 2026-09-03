@@ -31,6 +31,7 @@ export interface RunCollectorOptions {
   only?: string[];
   skip?: string[];
   redactExtra?: RegExp[];
+  entropy?: boolean;
   /** Override the collector set. Used by tests to drive failure paths. */
   collectors?: { id: string; title: string; fn: Collector }[];
   onCollectorStart?: (id: string) => void;
@@ -86,7 +87,7 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
       let section: Section;
       if (res.status === 'ok' && res.rawContent !== undefined) {
         // MANDATORY: RawText MUST pass through redact() to become SafeText
-        const { text: safeContent, count } = redact(res.rawContent, options.redactExtra);
+        const { text: safeContent, count } = redact(res.rawContent, options.redactExtra, { entropy: options.entropy });
         totalRedactions += count;
 
         section = {
@@ -98,7 +99,7 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
         };
       } else {
         // MANDATORY: reasons carry raw command lines and paths, so they redact too
-        const reason = redact(res.unavailableReason || 'unavailable', options.redactExtra);
+        const reason = redact(res.unavailableReason || 'unavailable', options.redactExtra, { entropy: options.entropy });
         totalRedactions += reason.count;
 
         section = {
@@ -115,7 +116,7 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
     } catch (err: any) {
       const colDuration = Date.now() - colStart;
       // execa failure messages embed the full command line and cwd
-      const reason = redact(err?.message || 'collector error', options.redactExtra);
+      const reason = redact(err?.message || 'collector error', options.redactExtra, { entropy: options.entropy });
       totalRedactions += reason.count;
 
       const section: Section = {
