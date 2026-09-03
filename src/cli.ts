@@ -5,9 +5,9 @@ import { execa } from 'execa';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { createCrashPack } from './index.js';
+import { createCrashPack, ALL_COLLECTORS } from './index.js';
 import { renderMarkdown } from './render/markdown.js';
-import { loadConfig } from './config.js';
+import { loadConfig, configFileFound } from './config.js';
 
 interface CliArgs {
   wrap?: string;
@@ -25,27 +25,42 @@ interface CliArgs {
   entropy?: boolean;
 }
 
+function warn(message: string): void {
+  process.stderr.write(`${pc.yellow('warning:')} ${message}\n`);
+}
+
+const STDIN_TIMEOUT_MS = 10_000;
+
 async function readStdin(): Promise<string> {
   return new Promise((resolve) => {
     let data = '';
+    // A pipe that never closes must not hang crashpack forever (B-12)
+    const timer = setTimeout(() => {
+      warn('stdin did not close within 10s; proceeding with what arrived');
+      resolve(data);
+    }, STDIN_TIMEOUT_MS);
+    timer.unref?.();
     process.stdin.setEncoding('utf8');
     process.stdin.on('data', (chunk) => {
       data += chunk;
     });
     process.stdin.on('end', () => {
+      clearTimeout(timer);
       resolve(data);
     });
     process.stdin.on('error', () => {
+      clearTimeout(timer);
       resolve(data);
     });
     // If stdin is a TTY and not piped, don't hang
     if (process.stdin.isTTY) {
+      clearTimeout(timer);
       resolve('');
     }
   });
 }
 
-function parseRegexPattern(pattern: string): RegExp | null {
+export function parseRegexPattern(pattern: string): RegExp | null {
   try {
     if (pattern.startsWith('/') && pattern.lastIndexOf('/') > 0) {
       const lastSlash = pattern.lastIndexOf('/');
@@ -61,7 +76,36 @@ function parseRegexPattern(pattern: string): RegExp | null {
   }
 }
 
-function extractIssueUrl(remoteUrl?: string, projectName?: string, body?: string): { platform: 'GitHub' | 'GitLab'; url: string } | null {
+/**
+ * GitHub rejects very long URLs, and percent-encoding roughly doubles
+ * markdown. A truncated issue the user does not know is truncated is the bad
+ * outcome, so past the ceiling we link to the saved file instead (B-06).
+ */
+const MAX_ISSUE_URL = 6000;
+
+/**
+ * An explicit --lines must beat a config file (B-08). Commander no longer
+ * supplies a default, so `undefined` is the only signal that the flag was
+ * absent — comparing against the literal '200' made an explicit --lines 200
+ * indistinguishable from no flag at all.
+ */
+export function resolveLines(cliLines?: string, configLines?: number): number {
+  const raw = cliLines ?? (configLines !== undefined ? String(configLines) : undefined);
+  return parseInt(raw ?? '200', 10) || 200;
+}
+
+export function issueBodyFor(markdown: string, savedPath?: string): { body: string; truncated: boolean } {
+  if (encodeURIComponent(markdown).length <= MAX_ISSUE_URL) {
+    return { body: markdown, truncated: false };
+  }
+  const where = savedPath ? `\n\nFull report saved to: ${savedPath}` : '';
+  return {
+    body: `The full crashpack report was too large for a pre-filled URL.\n\nIt is on your clipboard — paste it here.${where}`,
+    truncated: true,
+  };
+}
+
+export function extractIssueUrl(remoteUrl?: string, projectName?: string, body?: string): { platform: 'GitHub' | 'GitLab'; url: string } | null {
   if (!remoteUrl) return null;
   const ghMatch = remoteUrl.match(/github\.com[/:]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git|\/|$)/);
   if (ghMatch && ghMatch[1] && ghMatch[2]) {
@@ -95,8 +139,10 @@ export async function runCli(argv = process.argv): Promise<number> {
     .option('--stdout', 'Print the markdown report to stdout')
     .option('--json', 'Emit the raw CrashPack JSON object')
     .option('--no-clipboard', 'Skip copying to clipboard')
-    .option('--lines <n>', 'Number of log lines to capture (default 200)', '200')
-    .option('--since <duration>', 'Filter git commits and logs since duration (e.g. 1h, 1d)')
+    // No commander default: absent must be distinguishable from an explicit
+    // --lines 200, or config silently overrides the user's own flag (B-08).
+    .option('--lines <n>', 'Number of log lines to capture (default 200)')
+    .option('--since <duration>', 'Filter git commits since duration (e.g. 1h, 1d)')
     .option('--issue', 'Generate GitHub or GitLab issue pre-fill URL for this repository')
     .option('--only <ids>', 'Comma-separated collector IDs to run')
     .option('--skip <ids>', 'Comma-separated collector IDs to skip')
@@ -107,6 +153,7 @@ export async function runCli(argv = process.argv): Promise<number> {
   const options = program.opts<CliArgs>();
 
   // Merge defaults from .crashpackrc if present
+  let configLines: number | undefined;
   const fileConfig = loadConfig();
   if (fileConfig) {
     if (!options.only && fileConfig.only) options.only = fileConfig.only.join(',');
@@ -114,14 +161,25 @@ export async function runCli(argv = process.argv): Promise<number> {
     if ((!options.redactExtra || options.redactExtra.length === 0) && fileConfig.redactExtra) {
       options.redactExtra = fileConfig.redactExtra;
     }
-    if (options.lines === '200' && fileConfig.lines) {
-      options.lines = String(fileConfig.lines);
+    configLines = fileConfig.lines;
+  } else if (configFileFound()) {
+    warn('config file could not be parsed; using CLI options only');
+  }
+
+  // Validate collector IDs rather than silently producing an empty report
+  const validIds = new Set(ALL_COLLECTORS.map((c) => c.id));
+  for (const flag of ['only', 'skip'] as const) {
+    const raw = options[flag];
+    if (!raw) continue;
+    const unknown = raw.split(',').map((s) => s.trim()).filter((s) => s && !validIds.has(s.toLowerCase()));
+    if (unknown.length > 0) {
+      warn(`--${flag}: unknown collector ${unknown.join(', ')} (valid: ${[...validIds].join(', ')})`);
     }
   }
 
   // 1. Handle --wrap mode
   if (options.wrap) {
-    const lineLimit = parseInt(options.lines || '200', 10) || 200;
+    const lineLimit = resolveLines(options.lines, configLines);
     const logBuffer: string[] = [];
 
     const handleChunk = (chunk: Buffer | string) => {
@@ -159,7 +217,7 @@ export async function runCli(argv = process.argv): Promise<number> {
 
       // Non-zero exit -> proceed to collect pack
       const wrapBuffer = logBuffer.slice(-lineLimit).join('\n');
-      return await generateAndOutput(options, { wrapBuffer, exitCode: result.exitCode });
+      return await generateAndOutput({ ...options, lines: String(lineLimit) }, { wrapBuffer, exitCode: result.exitCode });
     } catch (err: any) {
       process.stderr.write(`\n${pc.red('Error running wrapped command:')} ${err.message}\n`);
       return 1;
@@ -172,7 +230,7 @@ export async function runCli(argv = process.argv): Promise<number> {
     stdinLog = await readStdin();
   }
 
-  return await generateAndOutput(options, { stdinLog });
+  return await generateAndOutput({ ...options, lines: String(resolveLines(options.lines, configLines)) }, { stdinLog });
 }
 
 interface ExtraContext {
@@ -182,7 +240,7 @@ interface ExtraContext {
 }
 
 async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise<number> {
-  const lineLimit = parseInt(options.lines || '200', 10) || 200;
+  const lineLimit = resolveLines(options.lines);
   const onlyList = options.only ? options.only.split(',').map((s) => s.trim()) : undefined;
   const skipList = options.skip ? options.skip.split(',').map((s) => s.trim()) : undefined;
 
@@ -191,6 +249,9 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     for (const pat of options.redactExtra) {
       const parsed = parseRegexPattern(pat);
       if (parsed) extraPatterns.push(parsed);
+      // Silently dropping this leaves the user believing a pattern protects
+      // them when it does not (B-12)
+      else warn(`--redact-extra: ignoring invalid pattern ${JSON.stringify(pat)}`);
     }
   }
 
@@ -238,17 +299,39 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     process.stderr.write(statusItems.join('\n') + '\n\n');
   }
 
+  const markdown = renderMarkdown(pack);
+
+  // The issue URL goes to stderr on every output path, so --issue --stdout
+  // and --issue --json still produce one (B-08.7).
+  const printIssueUrl = (savedPath?: string) => {
+    if (!options.issue) return;
+
+    const gitSection = pack.sections.find((s) => s.id === 'git');
+    const remoteMatch = (gitSection?.content || '').match(/Remote:\s*`([^`]+)`/);
+    const { body, truncated } = issueBodyFor(markdown, savedPath);
+    const issueInfo = extractIssueUrl(remoteMatch ? remoteMatch[1] : undefined, pack.projectName, body);
+
+    if (!issueInfo) {
+      warn('--issue: no GitHub or GitLab remote detected');
+      return;
+    }
+    if (truncated) {
+      warn('report too large for a pre-filled URL; paste the full report from your clipboard');
+    }
+    process.stderr.write(`  ${pc.bold(`🔗 ${issueInfo.platform} Issue URL:`)}\n  ${pc.underline(pc.cyan(issueInfo.url))}\n\n`);
+  };
+
   // Handle JSON output
   if (options.json) {
     process.stdout.write(JSON.stringify(pack, null, 2) + '\n');
+    printIssueUrl();
     return extra.exitCode ?? 0;
   }
-
-  const markdown = renderMarkdown(pack);
 
   // Handle stdout output
   if (options.stdout) {
     process.stdout.write(markdown + '\n');
+    printIssueUrl();
     return extra.exitCode ?? 0;
   }
 
@@ -296,17 +379,9 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     process.stderr.write(`${pc.cyan('│')}  ${pc.dim('⚡')} ${pc.magenta('Built by Poorvith')} ${pc.dim('· 100% local-first (0 network calls)')}\n`);
     process.stderr.write(`${pc.cyan('╰──────────────────────────────────────────────────────────────────────────╯')}\n\n`);
 
-    // Handle --issue flag: generate prefilled GitHub/GitLab Issue URL
-    if (options.issue) {
-      const gitSection = pack.sections.find((s) => s.id === 'git');
-      const gitContent = gitSection?.content || '';
-      const remoteMatch = gitContent.match(/Remote:\s*`([^`]+)`/);
-      const issueInfo = extractIssueUrl(remoteMatch ? remoteMatch[1] : undefined, pack.projectName, markdown);
-      if (issueInfo) {
-        process.stderr.write(`  ${pc.bold(`🔗 ${issueInfo.platform} Issue URL:`)}\n  ${pc.underline(pc.cyan(issueInfo.url))}\n\n`);
-      }
-    }
   }
+
+  printIssueUrl(outputPath);
 
   return extra.exitCode ?? 0;
 }
