@@ -8,6 +8,25 @@ interface PackageItem {
   version: string;
 }
 
+/**
+ * Prefer the version actually installed (B-05).
+ *
+ * A manifest range tells a maintainer what the reporter is *allowed* to run,
+ * which they could read from the repo themselves. The one number worth having
+ * in a bug report is what is actually on disk.
+ */
+function resolveNodeVersion(cwd: string, name: string, declared: string): string {
+  try {
+    const manifest = path.join(cwd, 'node_modules', ...name.split('/'), 'package.json');
+    const version = JSON.parse(fs.readFileSync(manifest, 'utf8')).version;
+    if (typeof version === 'string' && version) return version;
+  } catch {
+    // Not installed — fall through to the declared range.
+  }
+  // Rendered as written ('^15.0.3'), so a range never masquerades as exact.
+  return declared;
+}
+
 export const collectPackages: Collector = async (ctx) => {
   const cwd = ctx.cwd;
   const packages: PackageItem[] = [];
@@ -20,7 +39,7 @@ export const collectPackages: Collector = async (ctx) => {
       const json = JSON.parse(content);
       const deps = { ...json.dependencies, ...json.devDependencies };
       for (const [name, ver] of Object.entries(deps)) {
-        packages.push({ name, version: String(ver).replace(/^[\^~]/, '') });
+        packages.push({ name, version: resolveNodeVersion(cwd, name, String(ver)) });
       }
     } catch {
       // Ignored

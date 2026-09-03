@@ -32,6 +32,8 @@ export interface RunCollectorOptions {
   skip?: string[];
   redactExtra?: RegExp[];
   entropy?: boolean;
+  /** Hard ceiling on the whole pack. Default 5000ms. */
+  deadlineMs?: number;
   /** Override the collector set. Used by tests to drive failure paths. */
   collectors?: { id: string; title: string; fn: Collector }[];
   onCollectorStart?: (id: string) => void;
@@ -131,7 +133,30 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
     }
   });
 
-  const sectionResults = await Promise.all(collectorPromises);
+  // Backstop: a pathological collector degrades to unavailable rather than
+  // holding the whole run open (B-07). Preserves the rule that one collector
+  // can never fail the pack.
+  const deadlineMs = options.deadlineMs ?? 5000;
+  const sectionResults = await Promise.all(
+    collectorPromises.map((promise, i) =>
+      Promise.race([
+        promise,
+        new Promise<Section>((resolve) => {
+          const timer = setTimeout(() => {
+            const { id, title } = selected[i];
+            resolve({
+              id,
+              title,
+              status: 'unavailable',
+              unavailableReason: redact('exceeded global deadline').text,
+              durationMs: deadlineMs,
+            });
+          }, deadlineMs);
+          timer.unref?.();
+        }),
+      ])
+    )
+  );
 
   // Preserve canonical display order
   const orderMap = new Map(ALL_COLLECTORS.map((c, i) => [c.id, i]));
