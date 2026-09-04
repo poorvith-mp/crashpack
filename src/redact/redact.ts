@@ -1,6 +1,16 @@
-import { RawText, RedactResult, SafeText, unsafeMakeSafeText } from '../types.js';
+import { RawText, RedactResult, SafeText } from '../types.js';
+
 import { SECRET_PATTERNS } from './patterns.js';
 import { redactHighEntropy } from './entropy.js';
+
+/**
+ * The only way to mint SafeText. Deliberately module-private: exporting it
+ * would let any library consumer forge SafeText and bypass the gate (B-13).
+ */
+function unsafeMakeSafeText(value: string): SafeText {
+  return value as SafeText;
+}
+
 
 export interface RedactOptions {
   /** Generic high-entropy fallback. On by default; --no-entropy turns it off. */

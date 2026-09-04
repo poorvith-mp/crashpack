@@ -25,12 +25,6 @@ export function asRawText(value: string): RawText {
   return value as RawText;
 }
 
-/**
- * Internal helper to cast to SafeText. Only callable by redact module.
- */
-export function unsafeMakeSafeText(value: string): SafeText {
-  return value as SafeText;
-}
 
 export type SectionStatus = 'ok' | 'unavailable';
 

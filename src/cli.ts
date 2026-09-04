@@ -25,6 +25,13 @@ interface CliArgs {
   entropy?: boolean;
 }
 
+/**
+ * Injected by tsup from package.json (B-15). The fallback keeps `tsx src/cli.ts`
+ * and the test suite working, where no define pass has run.
+ */
+declare const __CRASHPACK_VERSION__: string | undefined;
+const VERSION = typeof __CRASHPACK_VERSION__ === 'string' ? __CRASHPACK_VERSION__ : '0.0.0-dev';
+
 function warn(message: string): void {
   process.stderr.write(`${pc.yellow('warning:')} ${message}\n`);
 }
@@ -132,7 +139,7 @@ export async function runCli(argv = process.argv): Promise<number> {
   program
     .name('crashpack')
     .description('Everything your bug report needs, in one command.')
-    .version('0.1.2')
+    .version(VERSION)
     .option('--wrap <command>', 'Run a command, stream live, and capture crash context on non-zero exit')
     .option('--stdin', 'Read piped input as the log section')
     .option('--out <path>', 'Write output to a specific file instead of temp')
@@ -259,7 +266,7 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
 
   if (!isSilentMode) {
     process.stderr.write(`\n${pc.cyan('╭──────────────────────────────────────────────────────────╮')}\n`);
-    process.stderr.write(`${pc.cyan('│')}  ${pc.bold(pc.yellow('⚡ crashpack'))} ${pc.dim('v0.1.2')}                                    ${pc.cyan('│')}\n`);
+    process.stderr.write(`${pc.cyan('│')}  ${pc.bold(pc.yellow('⚡ crashpack'))} ${pc.dim(`v${VERSION}`)}                                    ${pc.cyan('│')}\n`);
     process.stderr.write(`${pc.cyan('│')}  ${pc.dim('Zero-config crash context collector')}                     ${pc.cyan('│')}\n`);
     process.stderr.write(`${pc.cyan('│')}  ${pc.magenta('Built by Poorvith')} ${pc.dim('(@poorvith-mp)')}                      ${pc.cyan('│')}\n`);
     process.stderr.write(`${pc.cyan('╰──────────────────────────────────────────────────────────╯')}\n\n`);

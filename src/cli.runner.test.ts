@@ -7,8 +7,8 @@ vi.mock('clipboardy', () => ({
 
 let out: string[];
 let err: string[];
-let outSpy: ReturnType<typeof vi.spyOn>;
-let errSpy: ReturnType<typeof vi.spyOn>;
+let outSpy: { mockRestore: () => void };
+let errSpy: { mockRestore: () => void };
 
 beforeEach(() => {
   out = [];
