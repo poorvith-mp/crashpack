@@ -1,5 +1,6 @@
 import { execa } from 'execa';
 import { asRawText, Collector, CollectorResult } from '../types.js';
+import { fenceFor } from '../render/fence.js';
 
 export const collectGit: Collector = async (ctx) => {
   const timeout = ctx.timeoutMs ?? 2000;
@@ -22,24 +23,29 @@ export const collectGit: Collector = async (ctx) => {
       };
     }
 
+    // These five are independent of one another. Running them sequentially at
+    // 2s each made git the ceiling on total runtime (B-07).
+    const logArgs = ctx.since
+      ? ['log', '-n', '10', `--since=${ctx.since}`, '--format=- `%h` %s — %cr']
+      : ['log', '-n', '3', '--format=- `%h` %s — %cr'];
+
+    const opts = { cwd, timeout, reject: false as const };
+    const [branchRes, remoteRes, statusRes, logRes, diffRes] = await Promise.all([
+      execa('git', ['rev-parse', '--abbrev-ref', 'HEAD'], opts),
+      execa('git', ['config', '--get', 'remote.origin.url'], opts),
+      execa('git', ['status', '--porcelain'], opts),
+      execa('git', logArgs, opts),
+      execa('git', ['diff', 'HEAD'], opts),
+    ]);
+
     // Branch
     let branch = 'unknown';
-    const branchRes = await execa('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-      cwd,
-      timeout,
-      reject: false,
-    });
     if (branchRes.exitCode === 0 && branchRes.stdout.trim()) {
       branch = branchRes.stdout.trim();
     }
 
     // Remote
     let remote = 'none';
-    const remoteRes = await execa('git', ['config', '--get', 'remote.origin.url'], {
-      cwd,
-      timeout,
-      reject: false,
-    });
     if (remoteRes.exitCode === 0 && remoteRes.stdout.trim()) {
       remote = remoteRes.stdout.trim();
       // Clean git@ URLs or https:// tokens if any
@@ -47,11 +53,6 @@ export const collectGit: Collector = async (ctx) => {
     }
 
     // Uncommitted files
-    const statusRes = await execa('git', ['status', '--porcelain'], {
-      cwd,
-      timeout,
-      reject: false,
-    });
     const statusLines = statusRes.exitCode === 0 && statusRes.stdout.trim()
       ? statusRes.stdout.trim().split('\n').filter(Boolean)
       : [];
@@ -59,16 +60,6 @@ export const collectGit: Collector = async (ctx) => {
 
     // Commits (support --since if provided)
     let commitsSection = '';
-    const logArgs = ctx.since
-      ? ['log', '-n', '10', `--since=${ctx.since}`, '--format=- `%h` %s — %cr']
-      : ['log', '-n', '3', '--format=- `%h` %s — %cr'];
-
-    const logRes = await execa('git', logArgs, {
-      cwd,
-      timeout,
-      reject: false,
-    });
-
     const commitLabel = ctx.since ? `**Commits since ${ctx.since}**` : `**Last 3 commits**`;
     if (logRes.exitCode === 0 && logRes.stdout.trim()) {
       commitsSection = `${commitLabel}\n${logRes.stdout.trim()}`;
@@ -78,12 +69,6 @@ export const collectGit: Collector = async (ctx) => {
 
     // Diff
     let diffSection = '';
-    const diffRes = await execa('git', ['diff', 'HEAD'], {
-      cwd,
-      timeout,
-      reject: false,
-    });
-    
     let diffOutput = diffRes.exitCode === 0 ? diffRes.stdout : '';
     // If diff HEAD failed (e.g. initial commit with no HEAD), try git diff
     if (diffRes.exitCode !== 0) {
@@ -101,7 +86,9 @@ export const collectGit: Collector = async (ctx) => {
         finalDiff = diffLines.slice(0, 500);
         truncated = true;
       }
-      diffSection = `\n\n**Diff**\n\`\`\`diff\n${finalDiff.join('\n')}${truncated ? '\n... [diff truncated at 500 lines]' : ''}\n\`\`\``;
+      const diffBody = `${finalDiff.join('\n')}${truncated ? '\n... [diff truncated at 500 lines]' : ''}`;
+      const fence = fenceFor(diffBody);
+      diffSection = `\n\n**Diff**\n${fence}diff\n${diffBody}\n${fence}`;
     }
 
     const lines: string[] = [

@@ -25,12 +25,6 @@ export function asRawText(value: string): RawText {
   return value as RawText;
 }
 
-/**
- * Internal helper to cast to SafeText. Only callable by redact module.
- */
-export function unsafeMakeSafeText(value: string): SafeText {
-  return value as SafeText;
-}
 
 export type SectionStatus = 'ok' | 'unavailable';
 
@@ -39,7 +33,7 @@ export interface Section {
   title: string;              // 'Logs', 'Git', etc.
   status: SectionStatus;
   content?: SafeText;         // markdown body, ALREADY REDACTED
-  unavailableReason?: string; // required when status === 'unavailable'
+  unavailableReason?: SafeText; // required when status === 'unavailable'; ALREADY REDACTED
   durationMs: number;
 }
 

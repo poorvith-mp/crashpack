@@ -1,5 +1,21 @@
-import { RawText, RedactResult, SafeText, unsafeMakeSafeText } from '../types.js';
+import { RawText, RedactResult, SafeText } from '../types.js';
+
 import { SECRET_PATTERNS } from './patterns.js';
+import { redactHighEntropy } from './entropy.js';
+
+/**
+ * The only way to mint SafeText. Deliberately module-private: exporting it
+ * would let any library consumer forge SafeText and bypass the gate (B-13).
+ */
+function unsafeMakeSafeText(value: string): SafeText {
+  return value as SafeText;
+}
+
+
+export interface RedactOptions {
+  /** Generic high-entropy fallback. On by default; --no-entropy turns it off. */
+  entropy?: boolean;
+}
 
 /**
  * Mandated Redaction Pass-through Engine.
@@ -7,7 +23,11 @@ import { SECRET_PATTERNS } from './patterns.js';
  * Every collector returns RawText, and only this function can produce SafeText.
  * Bias toward over-redaction.
  */
-export function redact(input: RawText | string, extraPatterns?: RegExp[]): RedactResult {
+export function redact(
+  input: RawText | string,
+  extraPatterns?: RegExp[],
+  options: RedactOptions = {},
+): RedactResult {
   if (!input) {
     return {
       text: unsafeMakeSafeText(''),
@@ -53,6 +73,13 @@ export function redact(input: RawText | string, extraPatterns?: RegExp[]): Redac
         return '[redacted]';
       });
     }
+  }
+
+  // Generic fallback runs last: anything already replaced above is inert.
+  if (options.entropy !== false) {
+    const fallback = redactHighEntropy(current);
+    current = fallback.text;
+    totalRedactions += fallback.count;
   }
 
   return {

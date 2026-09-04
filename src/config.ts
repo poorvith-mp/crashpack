@@ -9,13 +9,20 @@ export interface CrashpackConfig {
   lines?: number;
 }
 
+const CANDIDATES = [
+  '.crashpackrc',
+  '.crashpackrc.json',
+  '.crashpackrc.toml',
+  'crashpack.config.json',
+];
+
+/** True when a config file exists, whether or not it parsed (B-12). */
+export function configFileFound(cwd: string = process.cwd()): boolean {
+  return CANDIDATES.some((f) => fs.existsSync(path.join(cwd, f)));
+}
+
 export function loadConfig(cwd: string = process.cwd()): CrashpackConfig | null {
-  const candidates = [
-    '.crashpackrc',
-    '.crashpackrc.json',
-    '.crashpackrc.toml',
-    'crashpack.config.json',
-  ];
+  const candidates = CANDIDATES;
 
   for (const filename of candidates) {
     const fullPath = path.join(cwd, filename);

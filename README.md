@@ -14,10 +14,10 @@ When something breaks in local development, filing a useful bug report means man
 
 ## Key Guarantees
 
-- **Zero Network Calls:** No cloud upload, no telemetry, no version check, no tracking. Nothing ever leaves your machine.
-- **Mandatory Redaction:** Redaction is an architectural pass-through between raw collectors and output. AWS keys, Stripe tokens, GitHub credentials, private keys, database passwords, and JWTs are stripped automatically.
-- **Environment Safety:** Only env key names are listed (`Keys: DATABASE_URL, STRIPE_KEY`). Env values are **never** read, stored, or exposed.
-- **Sub-2-Second Execution:** Parallel collection with strict 2-second command timeouts.
+- **Zero Network Calls:** No cloud upload, no telemetry, no version check, no tracking. Nothing ever leaves your machine. Port detection opens loopback TCP connections to `127.0.0.1` only — nothing is sent, and no non-local socket is ever opened.
+- **Mandatory Redaction:** Redaction is an architectural pass-through between raw collectors and output, enforced by the type system — collectors emit `RawText` and only the redactor can produce the `SafeText` the renderer accepts. AWS, Stripe, GitHub, GitLab, OpenAI, Anthropic, Google, SendGrid, Slack, Twilio and npm credentials, private keys, database passwords, JWTs and basic-auth URLs are stripped automatically, plus a high-entropy fallback for token shapes not on that list.
+- **Environment Safety:** Only env key names are listed (`Keys: DATABASE_URL, STRIPE_KEY`). Env values are parsed in memory to extract key names and are **never** written to the report, stored, or exposed.
+- **Fast:** Typically under two seconds. Collectors run in parallel under a 2-second per-command timeout and a 5-second hard ceiling.
 
 ---
 
@@ -77,8 +77,8 @@ npm run dev 2>&1 | npx crashpack --stdin
 | `(default)` | Collect all, copy to clipboard, print temp file path |
 | `--wrap "<cmd>"` | Run command live, capture context on non-zero exit |
 | `--stdin` | Read piped input as the log section |
-| `--issue` | Generate GitHub issue pre-fill URL for this repository |
-| `--since <duration>` | Filter git commits and logs since duration (e.g. `1h`, `1d`) |
+| `--issue` | Generate a GitHub or GitLab issue pre-fill URL for this repository |
+| `--since <duration>` | Filter git commits since duration (e.g. `1h`, `1d`) |
 | `--stdout` | Print the markdown report directly to stdout |
 | `--json` | Emit raw JSON `CrashPack` object |
 | `--out <path>` | Write markdown to a specific file instead of temp |
@@ -87,6 +87,7 @@ npm run dev 2>&1 | npx crashpack --stdin
 | `--only <ids>` | Run only specific collectors (e.g. `--only git,system`) |
 | `--skip <ids>` | Skip specific collectors (e.g. `--skip docker,ports`) |
 | `--redact-extra <regex>` | Additional user-supplied regex patterns to redact |
+| `--no-entropy` | Disable the generic high-entropy token fallback |
 
 ---
 
@@ -131,9 +132,11 @@ _2026-08-17 14:22 UTC · collected in 1.2s · 4 values redacted_
 ## Packages
 | Package | Version |
 |---|---|
-| next | 15.0.3 |
+| next | 15.4.2 |
 | react | 19.0.0 |
 _...and 42 more_
+
+_Installed versions are read from `node_modules`; the first 20 packages are shown._
 
 ## Docker
 - Daemon: running

@@ -31,11 +31,16 @@ export interface RunCollectorOptions {
   only?: string[];
   skip?: string[];
   redactExtra?: RegExp[];
+  entropy?: boolean;
+  /** Hard ceiling on the whole pack. Default 5000ms. */
+  deadlineMs?: number;
+  /** Override the collector set. Used by tests to drive failure paths. */
+  collectors?: { id: string; title: string; fn: Collector }[];
   onCollectorStart?: (id: string) => void;
   onCollectorComplete?: (id: string, status: SectionStatus, reason?: string) => void;
 }
 
-const ALL_COLLECTORS: { id: string; title: string; fn: Collector }[] = [
+export const ALL_COLLECTORS: { id: string; title: string; fn: Collector }[] = [
   { id: 'logs', title: 'Logs', fn: collectLogs },
   { id: 'git', title: 'Git', fn: collectGit },
   { id: 'system', title: 'System', fn: collectSystem },
@@ -52,7 +57,7 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
   const projectName = path.basename(cwd) || 'project';
 
   // Filter collectors
-  let selected = ALL_COLLECTORS;
+  let selected = options.collectors ?? ALL_COLLECTORS;
   if (options.only && options.only.length > 0) {
     const onlySet = new Set(options.only.map((s) => s.trim().toLowerCase()));
     selected = selected.filter((c) => onlySet.has(c.id.toLowerCase()));
@@ -84,7 +89,7 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
       let section: Section;
       if (res.status === 'ok' && res.rawContent !== undefined) {
         // MANDATORY: RawText MUST pass through redact() to become SafeText
-        const { text: safeContent, count } = redact(res.rawContent, options.redactExtra);
+        const { text: safeContent, count } = redact(res.rawContent, options.redactExtra, { entropy: options.entropy });
         totalRedactions += count;
 
         section = {
@@ -95,11 +100,15 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
           durationMs: colDuration,
         };
       } else {
+        // MANDATORY: reasons carry raw command lines and paths, so they redact too
+        const reason = redact(res.unavailableReason || 'unavailable', options.redactExtra, { entropy: options.entropy });
+        totalRedactions += reason.count;
+
         section = {
           id,
           title,
           status: 'unavailable',
-          unavailableReason: res.unavailableReason || 'unavailable',
+          unavailableReason: reason.text,
           durationMs: colDuration,
         };
       }
@@ -108,11 +117,15 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
       return section;
     } catch (err: any) {
       const colDuration = Date.now() - colStart;
+      // execa failure messages embed the full command line and cwd
+      const reason = redact(err?.message || 'collector error', options.redactExtra, { entropy: options.entropy });
+      totalRedactions += reason.count;
+
       const section: Section = {
         id,
         title,
         status: 'unavailable',
-        unavailableReason: err?.message || 'collector error',
+        unavailableReason: reason.text,
         durationMs: colDuration,
       };
       options.onCollectorComplete?.(id, 'unavailable', section.unavailableReason);
@@ -120,7 +133,30 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
     }
   });
 
-  const sectionResults = await Promise.all(collectorPromises);
+  // Backstop: a pathological collector degrades to unavailable rather than
+  // holding the whole run open (B-07). Preserves the rule that one collector
+  // can never fail the pack.
+  const deadlineMs = options.deadlineMs ?? 5000;
+  const sectionResults = await Promise.all(
+    collectorPromises.map((promise, i) =>
+      Promise.race([
+        promise,
+        new Promise<Section>((resolve) => {
+          const timer = setTimeout(() => {
+            const { id, title } = selected[i];
+            resolve({
+              id,
+              title,
+              status: 'unavailable',
+              unavailableReason: redact('exceeded global deadline').text,
+              durationMs: deadlineMs,
+            });
+          }, deadlineMs);
+          timer.unref?.();
+        }),
+      ])
+    )
+  );
 
   // Preserve canonical display order
   const orderMap = new Map(ALL_COLLECTORS.map((c, i) => [c.id, i]));

@@ -84,7 +84,8 @@ export const collectPorts: Collector = async (_ctx) => {
     };
   }
 
-  const lines = activePorts.map((p) => `- \`${p.port}\` — ${p.label}`);
+  // Labels are inferred from the port number; no process is identified (B-14).
+  const lines = activePorts.map((p) => `- \`${p.port}\` — likely ${p.label}`);
 
   return {
     id: 'ports',
