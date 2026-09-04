@@ -1,6 +1,6 @@
 {
   "name": "crashpack",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Everything your bug report needs, in one command.",
   "type": "module",
   "bin": {
