@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { asRawText, Collector, CollectorResult } from '../types.js';
+import { asRawText, Collector } from '../types.js';
 
 const ENV_FILENAMES = [
   '.env',

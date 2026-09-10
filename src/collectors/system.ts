@@ -1,6 +1,6 @@
 import * as os from 'node:os';
 import * as fs from 'node:fs';
-import { asRawText, Collector, CollectorResult } from '../types.js';
+import { asRawText, Collector } from '../types.js';
 
 function formatBytes(bytes: number): string {
   const gb = bytes / (1024 * 1024 * 1024);

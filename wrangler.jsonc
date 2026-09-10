@@ -1,0 +1,15 @@
+{
+  "name": "crashpack",
+  "compatibility_date": "2026-09-09",
+  "workers_dev": true,
+  "preview_urls": false,
+  "build": { "command": "npm run build:site" },
+  "assets": {
+    "directory": "./site-dist",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "crashpack.poorvithmp.com", "custom_domain": true }
+  ]
+}

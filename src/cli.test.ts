@@ -16,7 +16,7 @@ describe('CLI & Orchestration', () => {
 
     const markdown = renderMarkdown(pack);
     expect(markdown).toContain('# crashpack ·');
-    expect(markdown).toContain('No data left this machine.');
+    expect(markdown).toContain('Redaction can miss secrets; review before sharing.');
   });
 
   it('respects --only filter', async () => {

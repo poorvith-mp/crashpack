@@ -1,5 +1,5 @@
 import { execa } from 'execa';
-import { asRawText, Collector, CollectorResult } from '../types.js';
+import { asRawText, Collector } from '../types.js';
 
 const MAX_CONTAINERS = 15;
 

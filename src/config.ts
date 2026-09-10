@@ -7,6 +7,8 @@ export interface CrashpackConfig {
   skip?: string[];
   redactExtra?: string[];
   lines?: number;
+  clipboard?: boolean;
+  out?: string;
 }
 
 const CANDIDATES = [
@@ -16,25 +18,42 @@ const CANDIDATES = [
   'crashpack.config.json',
 ];
 
-/** True when a config file exists, whether or not it parsed (B-12). */
-export function configFileFound(cwd: string = process.cwd()): boolean {
-  return CANDIDATES.some((f) => fs.existsSync(path.join(cwd, f)));
+function validate(value: unknown): CrashpackConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
+  for (const [key, item] of Object.entries(value)) {
+    switch (key) {
+      case 'only': case 'skip': case 'redactExtra':
+        if (!Array.isArray(item) || !item.every((entry) => typeof entry === 'string')) throw new Error();
+        break;
+      case 'lines':
+        if (!Number.isSafeInteger(item) || item <= 0) throw new Error();
+        break;
+      case 'clipboard':
+        if (typeof item !== 'boolean') throw new Error();
+        break;
+      case 'out':
+        if (typeof item !== 'string' || !item.trim()) throw new Error();
+        break;
+      default: throw new Error();
+    }
+  }
+  return value as CrashpackConfig;
 }
 
 export function loadConfig(cwd: string = process.cwd()): CrashpackConfig | null {
-  const candidates = CANDIDATES;
-
-  for (const filename of candidates) {
+  for (const filename of [...CANDIDATES, 'package.json']) {
     const fullPath = path.join(cwd, filename);
     if (fs.existsSync(fullPath)) {
       try {
         const content = fs.readFileSync(fullPath, 'utf8');
-        if (filename.endsWith('.toml') || (!content.trim().startsWith('{') && content.includes('='))) {
-          return parseToml(content) as CrashpackConfig;
+        if (filename === 'package.json') {
+          const pkg = JSON.parse(content);
+          return Object.hasOwn(pkg, 'crashpack') ? validate(pkg.crashpack) : null;
         }
-        return JSON.parse(content) as CrashpackConfig;
+        const toml = filename.endsWith('.toml') || (filename === '.crashpackrc' && !content.trim().startsWith('{') && content.includes('='));
+        return validate(toml ? parseToml(content) : JSON.parse(content));
       } catch {
-        return null;
+        throw new Error('Invalid crashpack configuration. Check syntax and supported option types.');
       }
     }
   }

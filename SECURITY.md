@@ -1,48 +1,25 @@
-# Security Policy
+# Security policy
 
-## Supported Versions
+## Supported versions
 
-We release security patches and pattern updates for the following versions:
+Security fixes target the current 0.3.x source release line. Older versions aren't maintained with parallel backports. Check [npm](https://www.npmjs.com/package/crashpack) and [releases](https://github.com/poorvith-mp/crashpack/releases) for published availability; a source version doesn't establish completed publication.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
-| < 0.1.0 | :x:                |
+## Report handling and limits
 
----
+Collector content and unavailable reasons pass through heuristic redaction before Markdown and JSON output. TypeScript's `RawText` and `SafeText` brands help maintain that pipeline. They don't prove text is free of secrets; top-level metadata also needs review. Unknown tokens, personal information, source code, paths, and identifiers may remain. Zero redactions means no rules matched.
 
-## Security Architecture & Guarantees
+The environment collector reads supported `.env` files into memory and emits only key names. It doesn't intentionally emit their values. Those values may appear in logs and diffs, where redaction depends on matching rules. Custom regular expressions can miss content, over-redact it, or consume excessive CPU. Syntax validation isn't a performance guarantee.
 
-`crashpack` is built on a **security-first, local-only** design model:
+Installed collection is offline by default and has no telemetry. Port probes use loopback TCP. Docker may contact a configured remote daemon. Wrapped commands execute in a shell with their own network behavior and stream live, unredacted output to stderr. Installation and `npx` may download packages.
 
-1. **Zero Outbound Network Calls**
-   - The CLI makes zero HTTP/HTTPS requests, zero telemetry pings, and zero analytics calls.
-   - All probes utilize offline local Node.js APIs (`node:os`, `node:fs`, `node:net`).
-   - The guarantee that *"No data left this machine"* is an absolute architectural invariant.
+`--issue` constructs a URL locally; opening it shares encoded content with GitHub or GitLab. `--issue --create` saves the full report, displays it in an interactive terminal, asks for a title, and requires explicit confirmation before a GitHub upload through authenticated `gh`. Stdin, machine-output, and non-TTY modes don't upload. Oversized reports remain intact for manual recovery. Check existing issues before retrying an ambiguous upload failure.
 
-2. **Mandatory Pass-Through Redaction**
-   - Redaction is enforced at compile-time with TypeScript branded types (`RawText` → `SafeText`).
-   - Collectors produce unredacted `RawText` that cannot reach any output sink (clipboard, file, stdout, JSON) without passing through `redact()`.
-   - Pattern matching covers AWS keys, Stripe tokens, GitHub credentials, private keys (RSA/OPENSSH/EC), JWTs, database connection strings with passwords, Bearer headers, and high-entropy secrets based on standard Gitleaks definitions.
+Clipboard copying is enabled by default and can interact with clipboard history or sync. Use `--no-clipboard`, review reports, and remove local copies when no longer needed. File creation requests mode `0600`; actual access depends on the OS and existing permissions. Crashpack cannot guarantee that no data leaves the machine.
 
-3. **Environment Value Masking**
-   - When inspecting `.env` files, `crashpack` lists **key names only** (`Keys: DATABASE_URL, STRIPE_KEY`).
-   - Secret values are never stored in memory or rendered in output.
+## Reporting a vulnerability or redaction bypass
 
----
+Don't post credentials or private reports in public issues. Use [GitHub Private Vulnerability Reporting](https://github.com/poorvith-mp/crashpack/security/advisories/new) or email [poorvith007@proton.me](mailto:poorvith007@proton.me).
 
-## Reporting a Vulnerability or Pattern Bypass
+Include Crashpack and Node.js versions, relevant flags/configuration, expected behavior, and a minimal synthetic reproduction. If a real credential was exposed, revoke or rotate it through its provider; deleting a report doesn't invalidate it.
 
-If you discover a security vulnerability, architectural bypass, or an unmasked credential pattern in `crashpack`, please do **not** open a public GitHub issue.
-
-Instead, please report it privately:
-
-- **Email:** [poorvith007@proton.me](mailto:poorvith007@proton.me)
-- **GitHub:** Use [GitHub Private Vulnerability Reporting](https://github.com/poorvith-mp/crashpack/security/advisories/new) on the repository.
-
-### What to Include
-- A description of the issue or unmasked pattern format.
-- A sanitized sample snippet reproducing the bypass.
-- The version of `crashpack` and Node.js runtime.
-
-We will acknowledge receipt within 24 hours and issue a patch release promptly.
+Automated checks use synthetic fixtures and mocked upload paths. They test known cases and don't certify that arbitrary reports are safe to share.

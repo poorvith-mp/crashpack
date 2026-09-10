@@ -6,5 +6,7 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
     testTimeout: 10000,
+    // Several integration files spawn runtime probes; bound process contention.
+    maxWorkers: 2,
   },
 });

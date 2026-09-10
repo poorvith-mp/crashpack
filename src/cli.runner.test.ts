@@ -52,7 +52,7 @@ describe('runCli input validation (B-12)', () => {
     await runCli(argv('--json', '--only', 'nonsense'));
 
     expect(err.join('')).toContain('unknown collector');
-    expect(err.join('')).toContain('nonsense');
+    expect(err.join('')).not.toContain('nonsense');
   });
 
   it('warns on an invalid --redact-extra pattern rather than dropping it silently', async () => {
@@ -112,7 +112,9 @@ describe('issueBodyFor (B-06)', () => {
 
     expect(truncated).toBe(true);
     expect(encodeURIComponent(body).length).toBeLessThan(6000);
-    expect(body).toContain('/tmp/report.md');
+    expect(body).toContain('saved report');
+    expect(body).not.toContain('/tmp/report.md');
+    expect(body).not.toContain('clipboard');
   });
 });
 
@@ -151,7 +153,11 @@ describe('resolveLines precedence (B-08)', () => {
     expect(resolveLines('50', 500)).toBe(50);
   });
 
-  it('falls back to 200 for unparseable input', () => {
-    expect(resolveLines('abc', undefined)).toBe(200);
+  it.each(['abc', '0', '-1', '1.5', '20oops', '9007199254740992'])('rejects invalid lines %s', (value) => {
+    expect(() => resolveLines(value)).toThrow('positive safe integer');
   });
+});
+
+it.each(['https://evilgithub.com/team/repo', 'https://github.com.evil.test/team/repo', 'https://evil.test/github.com/team/repo', 'https://github.com@evil.test/team/repo'])('rejects spoofed remotes %s', (remote) => {
+  expect(extractIssueUrl(remote)).toBeNull();
 });

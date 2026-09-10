@@ -11,3 +11,6 @@ coverage/
 *.env
 .env.local
 .env*.local
+
+site-dist/
+.wrangler/

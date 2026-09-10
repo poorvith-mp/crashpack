@@ -1,6 +1,6 @@
 {
   "name": "crashpack",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Everything your bug report needs, in one command.",
   "type": "module",
   "bin": {
@@ -28,7 +28,7 @@
     "type": "git",
     "url": "git+https://github.com/poorvith-mp/crashpack.git"
   },
-  "homepage": "https://github.com/poorvith-mp/crashpack#readme",
+  "homepage": "https://crashpack.poorvithmp.com",
   "bugs": {
     "url": "https://github.com/poorvith-mp/crashpack/issues"
   },
@@ -37,8 +37,11 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "prepack": "tsup"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.site.json",
+    "prepack": "tsup",
+    "build:site": "node scripts/build-site.mjs",
+    "dev:site": "node scripts/serve-site.mjs",
+    "deploy:site": "npx wrangler@4.125.0 deploy"
   },
   "keywords": [
     "crashpack",
@@ -61,8 +64,12 @@
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
+    "gsap": "^3.15.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.0",
     "vitest": "^3.0.5"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

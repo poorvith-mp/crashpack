@@ -1,4 +1,4 @@
-import { asRawText, Collector, CollectorResult } from '../types.js';
+import { asRawText, Collector } from '../types.js';
 
 /**
  * Strips non-printable ASCII and control characters, while preserving tab and standard whitespace.

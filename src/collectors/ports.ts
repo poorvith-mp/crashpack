@@ -1,5 +1,5 @@
 import * as net from 'node:net';
-import { asRawText, Collector, CollectorResult } from '../types.js';
+import { asRawText, Collector } from '../types.js';
 
 interface PortInfo {
   port: number;

@@ -42,4 +42,41 @@ describe('Crashpack Config Loader (PMP-43)', () => {
   it('returns null when no config file exists', () => {
     expect(loadConfig(tempDir)).toBeNull();
   });
+
+  it('loads package fallback, clipboard and output options', () => {
+    fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify({ crashpack: { clipboard: false, out: 'report.md' } }));
+    expect(loadConfig(tempDir)).toEqual({ clipboard: false, out: 'report.md' });
+  });
+
+  it('uses the first dedicated file without merging or falling back', () => {
+    fs.writeFileSync(path.join(tempDir, '.crashpackrc'), '{"lines":20}');
+    fs.writeFileSync(path.join(tempDir, '.crashpackrc.json'), '{"skip":["git"]}');
+    expect(loadConfig(tempDir)).toEqual({ lines: 20 });
+    fs.writeFileSync(path.join(tempDir, '.crashpackrc'), 'private malformed value');
+    expect(() => loadConfig(tempDir)).toThrow('Invalid crashpack configuration');
+  });
+
+  it.each([null, [], { unknown: 'private value' }, { lines: 0 }, { lines: 1.5 }, { lines: Number.MAX_SAFE_INTEGER + 1 }, { only: 'git' }, { skip: [1] }, { redactExtra: [false] }, { clipboard: 'false' }, { out: ' ' }])('rejects malformed schema %j without exposing values', (value) => {
+    fs.writeFileSync(path.join(tempDir, '.crashpackrc'), JSON.stringify(value));
+    expect(() => loadConfig(tempDir)).toThrow('Invalid crashpack configuration');
+  });
+
+  it('ignores package metadata with no crashpack key', () => {
+    fs.writeFileSync(path.join(tempDir, 'package.json'), '{"name":"demo"}');
+    expect(loadConfig(tempDir)).toBeNull();
+  });
+
+  it('does not search parent directories', () => {
+    fs.writeFileSync(path.join(tempDir, '.crashpackrc'), '{"lines":20}');
+    const child = path.join(tempDir, 'child');
+    fs.mkdirSync(child);
+    expect(loadConfig(child)).toBeNull();
+  });
+
+  it('rejects an invalid package config and malformed JSON with a generic error', () => {
+    fs.writeFileSync(path.join(tempDir, 'package.json'), '{"crashpack":{"lines":"private value"}}');
+    expect(() => loadConfig(tempDir)).toThrow('Invalid crashpack configuration');
+    fs.writeFileSync(path.join(tempDir, 'package.json'), 'malformed private value');
+    expect(() => loadConfig(tempDir)).toThrow('Invalid crashpack configuration');
+  });
 });

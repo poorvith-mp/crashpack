@@ -12,7 +12,8 @@ declare const __safeTextBrand: unique symbol;
 export type RawText = string & { readonly [__rawTextBrand]: true };
 
 /**
- * Branded type for redacted, safe strings.
+ * Branded type for strings that passed through redaction.
+ * This tracks the pipeline, not whether every secret was found.
  * Section.content ONLY accepts SafeText.
  */
 export type SafeText = string & { readonly [__safeTextBrand]: true };
@@ -79,7 +80,9 @@ export interface CliOptions {
   lines?: string;
   since?: string;
   issue?: boolean;
+  create?: boolean;
   only?: string;
   skip?: string;
   redactExtra?: string[];
+  entropy?: boolean;
 }

@@ -31,3 +31,6 @@ jobs:
 
       - name: Build package
         run: npm run build
+
+      - name: Build website and check script budget
+        run: npm run build:site

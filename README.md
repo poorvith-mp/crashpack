@@ -1,184 +1,90 @@
-# crashpack
+<p align="center"><img src="https://raw.githubusercontent.com/poorvith-mp/crashpack/main/docs/assets/logo.svg" width="72" height="72" alt="Crashpack"></p>
 
-> Everything your bug report needs, in one command. Built by Poorvith.
+# Crashpack
 
-[![npm version](https://img.shields.io/npm/v/crashpack.svg)](https://www.npmjs.com/package/crashpack)
-[![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](https://opensource.org/licenses/MIT)
-[![Node 20+](https://img.shields.io/badge/Node-20%2B-blue.svg)](https://nodejs.org)
+Collect the context around a crash into a Markdown report: logs, git state, system details, runtimes, packages, Docker, ports, and environment key names. Built by [Poorvith M P](https://github.com/poorvith-mp).
 
-When something breaks in local development, filing a useful bug report means manually gathering logs, git state, package versions, OS info, Docker status, and env config. It takes ten minutes, people skip half of it, and the resulting issue is unactionable.
+[Website](https://crashpack.poorvithmp.com) · [Full guide](https://crashpack.poorvithmp.com/guide) · [Sample report](docs/sample-report.md) · [Contributing](CONTRIBUTING.md)
 
-**crashpack** is a local-first, zero-config CLI that collects your complete runtime context and outputs a single markdown report ready to paste into GitHub, Slack, or an AI coding agent.
+![Crashpack website preview](https://raw.githubusercontent.com/poorvith-mp/crashpack/main/docs/assets/site-preview.png)
 
----
+## Start here
 
-## Key Guarantees
+Node.js 20 or newer is required. This source release is **0.3.0**. The commands below pin that version; [npm release history](https://www.npmjs.com/package/crashpack?activeTab=versions) records published versions separately from git tags.
 
-- **Zero Network Calls:** No cloud upload, no telemetry, no version check, no tracking. Nothing ever leaves your machine. Port detection opens loopback TCP connections to `127.0.0.1` only — nothing is sent, and no non-local socket is ever opened.
-- **Mandatory Redaction:** Redaction is an architectural pass-through between raw collectors and output, enforced by the type system — collectors emit `RawText` and only the redactor can produce the `SafeText` the renderer accepts. AWS, Stripe, GitHub, GitLab, OpenAI, Anthropic, Google, SendGrid, Slack, Twilio and npm credentials, private keys, database passwords, JWTs and basic-auth URLs are stripped automatically, plus a high-entropy fallback for token shapes not on that list.
-- **Environment Safety:** Only env key names are listed (`Keys: DATABASE_URL, STRIPE_KEY`). Env values are parsed in memory to extract key names and are **never** written to the report, stored, or exposed.
-- **Fast:** Typically under two seconds. Collectors run in parallel under a 2-second per-command timeout and a 5-second hard ceiling.
-
----
-
-## Quick Start
-
-Run directly via `npx` in any project folder:
-
-```bash
-npx crashpack
+```sh
+npx crashpack@0.3.0 --no-clipboard --out crash-report.md
 ```
 
-The report is automatically copied to your clipboard and saved to a temporary file outside your repository (e.g. `/tmp/crashpack-2026-08-17-1422.md`).
+Or install it once:
 
----
-
-## Usage & Workflows
-
-### 1. Post-Crash Collection (Default)
-
-Run immediately after a crash:
-
-```bash
-npx crashpack
+```sh
+npm install -g crashpack@0.3.0
+crashpack --no-clipboard --out crash-report.md
 ```
 
-### 2. GitHub Issue Pre-Fill (`--issue`)
+Installation and `npx` may download packages. Installed collection runs offline by default, with the network boundaries below. Read the saved report before sharing it. Clipboard copying is on by default; `--no-clipboard` keeps review deliberate. Default runs also save a temporary Markdown file outside the repository.
 
-Generate a one-click GitHub Issue creation link from your detected remote:
+## Common workflows
 
-```bash
-npx crashpack --issue
+```sh
+# Collect if a command exits unsuccessfully
+crashpack --wrap "npm test" --no-clipboard
+
+# Read logs from a pipe
+npm test 2>&1 | crashpack --stdin --no-clipboard
+
+# JSON section text has passed through redaction
+crashpack --json
+
+# Print a prefilled URL without opening it or uploading
+crashpack --issue --no-clipboard
+
+# Review, enter a title, and explicitly confirm a GitHub upload
+crashpack --issue --create --no-clipboard --out crash-report.md
 ```
 
-### 3. Command Wrapper Mode (`--wrap`)
+`--wrap` runs through a shell and streams the child's output live, **unredacted**, to stderr. It waits for the child to exit; a successful child produces no report. Default collection can't recover past terminal logs: use `--stdin` or `--wrap`.
 
-Run your command with live output streaming. If the command succeeds (`exit 0`), nothing extra happens. If it fails, crashpack buffers the last 200 lines and generates a crash report:
+`--issue --create` requires GitHub CLI authentication and an interactive terminal. It saves a local report, displays the full report, and requires an explicit `yes` before uploading. It never uploads with `--stdin`, `--stdout`, `--json`, or noninteractive input. GitLab supports URL mode only. See [recovery and limits](https://crashpack.poorvithmp.com/guide#workflows).
 
-```bash
-npx crashpack --wrap "npm run dev"
-npx crashpack --wrap "pytest tests/"
+## Configuration
+
+Create `.crashpackrc.json` in the directory where you run the CLI:
+
+```json
+{
+  "skip": ["docker"],
+  "lines": 200,
+  "clipboard": false,
+  "out": "crash-report.md"
+}
 ```
 
-### 4. Piped Stdin Mode (`--stdin`)
+CLI flags override individual fields. The first existing configuration wins, without merging or parent-directory lookup: `.crashpackrc`, `.crashpackrc.json`, `.crashpackrc.toml`, legacy `crashpack.config.json`, then `package.json`'s `crashpack` field. Invalid configuration fails before collection with exit code 2. [Full flags, TOML, and custom redaction](https://crashpack.poorvithmp.com/guide#configuration).
 
-Pipe standard error/output into crashpack:
+## Privacy and limits
 
-```bash
-npm run dev 2>&1 | npx crashpack --stdin
-```
+The environment collector reads supported `.env` files in memory and emits key names only. Values appearing in logs or diffs are handled by heuristic redaction. Unknown secrets, personal information, source code, paths, and project metadata can remain. A redaction count of zero doesn't establish that a report is safe.
 
----
+Ports are tested with loopback TCP connections. Docker CLI probes can contact a configured remote daemon. A wrapped command has its own network behavior. Opening an issue URL sends its contents to the destination; confirming `--create` uploads through `gh`. Clipboard history or sync can retain copied reports. There is no blanket guarantee that no data leaves the machine.
 
-## CLI Flags
+Crashpack gathers context; it doesn't diagnose dependency conflicts, resolve source maps, restart daemons, or capture memory dumps. Heuristics [#21](https://github.com/poorvith-mp/crashpack/issues/21), source maps [#23](https://github.com/poorvith-mp/crashpack/issues/23), and daemon memory work [#24](https://github.com/poorvith-mp/crashpack/issues/24) remain separate open designs.
 
-| Flag | Description |
-|---|---|
-| `(default)` | Collect all, copy to clipboard, print temp file path |
-| `--wrap "<cmd>"` | Run command live, capture context on non-zero exit |
-| `--stdin` | Read piped input as the log section |
-| `--issue` | Generate a GitHub or GitLab issue pre-fill URL for this repository |
-| `--since <duration>` | Filter git commits since duration (e.g. `1h`, `1d`) |
-| `--stdout` | Print the markdown report directly to stdout |
-| `--json` | Emit raw JSON `CrashPack` object |
-| `--out <path>` | Write markdown to a specific file instead of temp |
-| `--no-clipboard` | Skip copying to clipboard |
-| `--lines <n>` | Number of log lines to capture (default `200`) |
-| `--only <ids>` | Run only specific collectors (e.g. `--only git,system`) |
-| `--skip <ids>` | Skip specific collectors (e.g. `--skip docker,ports`) |
-| `--redact-extra <regex>` | Additional user-supplied regex patterns to redact |
-| `--no-entropy` | Disable the generic high-entropy token fallback |
+See the [privacy guide](https://crashpack.poorvithmp.com/guide#privacy) and [security policy](SECURITY.md). Report credential leaks privately.
 
----
+## From source
 
-## Sample Output
-
-```markdown
-# crashpack · my-project
-_2026-08-17 14:22 UTC · collected in 1.2s · 4 values redacted_
-
-## Logs
-
-[last 200 lines, redacted]
-
-## Git
-- Branch: `feat/checkout-redesign`
-- Remote: `github.com/user/my-project`
-- Uncommitted changes: 3 files
-
-**Last 3 commits**
-- `a1b2c3d` fix: handle null customer — 2 hours ago
-- `d4e5f6a` feat: add webhook handler — 1 day ago
-- `b7c8d9e` chore: bump deps — 2 days ago
-
-**Diff**
-```diff
-+ const customerId = session.metadata.customer_id;
-- const customerId = session.customer;
-```
-
-## System
-| | |
-|---|---|
-| OS | macOS 14.5 (arm64) |
-| CPU | Apple M2, 8 cores |
-| Memory | 4.2 GB free of 16 GB |
-| Disk | 82 GB free of 494 GB |
-
-## Runtimes
-- Node `20.11.0`
-- Python `3.11.7`
-
-## Packages
-| Package | Version |
-|---|---|
-| next | 15.4.2 |
-| react | 19.0.0 |
-_...and 42 more_
-
-_Installed versions are read from `node_modules`; the first 20 packages are shown._
-
-## Docker
-- Daemon: running
-- `postgres` — up 2 hours (healthy)
-- `redis` — exited (137) 4 minutes ago  ← likely relevant
-
-## Ports
-- `3000` — dev/node
-- `5432` — postgres
-
-## Environment
-_12 keys present. Values redacted. Keys: DATABASE_URL, STRIPE_SECRET_KEY, ..._
-
----
-_Generated by crashpack · Built by Poorvith. No data left this machine._
-```
-
----
-
-## Development
-
-```bash
-# Install dependencies
-npm install
-
-# Run test suite
+```sh
+git clone https://github.com/poorvith-mp/crashpack.git
+cd crashpack
+npm ci
+npm run typecheck
 npm test
-
-# Build ESM & CJS distribution
 npm run build
+node dist/cli.js --help
 ```
 
----
+The checked-out source version and npm availability are separate. `node dist/cli.js --version` reports the built package version. Library use, agent workflows, and site maintenance are in the [guide](https://crashpack.poorvithmp.com/guide#architecture).
 
-## Community & Security
-
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Security Policy](SECURITY.md)
-- [Contributing Guide](CONTRIBUTING.md)
-
----
-
-## License
-
-[MIT](LICENSE) © [Poorvith M P](https://github.com/poorvith-mp)
+MIT licensed. See [LICENSE](LICENSE) and [CHANGELOG](CHANGELOG.md).

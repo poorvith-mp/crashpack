@@ -5,9 +5,10 @@ import { execa } from 'execa';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { createInterface } from 'node:readline/promises';
 import { createCrashPack, ALL_COLLECTORS } from './index.js';
 import { renderMarkdown } from './render/markdown.js';
-import { loadConfig, configFileFound } from './config.js';
+import { loadConfig } from './config.js';
 
 interface CliArgs {
   wrap?: string;
@@ -19,6 +20,7 @@ interface CliArgs {
   lines?: string;
   since?: string;
   issue?: boolean;
+  create?: boolean;
   only?: string;
   skip?: string;
   redactExtra?: string[];
@@ -98,23 +100,26 @@ const MAX_ISSUE_URL = 6000;
  */
 export function resolveLines(cliLines?: string, configLines?: number): number {
   const raw = cliLines ?? (configLines !== undefined ? String(configLines) : undefined);
-  return parseInt(raw ?? '200', 10) || 200;
+  const value = Number(raw ?? '200');
+  if ((raw !== undefined && !/^\d+$/.test(raw)) || !Number.isSafeInteger(value) || value <= 0) {
+    throw new Error('--lines must be a positive safe integer');
+  }
+  return value;
 }
 
 export function issueBodyFor(markdown: string, savedPath?: string): { body: string; truncated: boolean } {
   if (encodeURIComponent(markdown).length <= MAX_ISSUE_URL) {
     return { body: markdown, truncated: false };
   }
-  const where = savedPath ? `\n\nFull report saved to: ${savedPath}` : '';
   return {
-    body: `The full crashpack report was too large for a pre-filled URL.\n\nIt is on your clipboard — paste it here.${where}`,
+    body: `The full crashpack report was too large for a pre-filled URL. Review and paste the full ${savedPath ? 'saved report' : 'report from your local output'} here.`,
     truncated: true,
   };
 }
 
 export function extractIssueUrl(remoteUrl?: string, projectName?: string, body?: string): { platform: 'GitHub' | 'GitLab'; url: string } | null {
   if (!remoteUrl) return null;
-  const ghMatch = remoteUrl.match(/github\.com[/:]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git|\/|$)/);
+  const ghMatch = remoteUrl.match(/^(?:https:\/\/github\.com\/|github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/);
   if (ghMatch && ghMatch[1] && ghMatch[2]) {
     const repo = `${ghMatch[1]}/${ghMatch[2]}`;
     return {
@@ -122,7 +127,7 @@ export function extractIssueUrl(remoteUrl?: string, projectName?: string, body?:
       url: `https://github.com/${repo}/issues/new?title=${encodeURIComponent(`[Bug]: Crash in ${projectName || 'repo'}`)}&body=${encodeURIComponent(body || '')}`,
     };
   }
-  const glMatch = remoteUrl.match(/gitlab\.com[/:]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git|\/|$)/);
+  const glMatch = remoteUrl.match(/^(?:https:\/\/gitlab\.com\/|gitlab\.com\/|git@gitlab\.com:|ssh:\/\/git@gitlab\.com\/)([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/);
   if (glMatch && glMatch[1] && glMatch[2]) {
     const repo = `${glMatch[1]}/${glMatch[2]}`;
     return {
@@ -145,12 +150,14 @@ export async function runCli(argv = process.argv): Promise<number> {
     .option('--out <path>', 'Write output to a specific file instead of temp')
     .option('--stdout', 'Print the markdown report to stdout')
     .option('--json', 'Emit the raw CrashPack JSON object')
+    .option('--clipboard', 'Copy report to clipboard (overrides config)')
     .option('--no-clipboard', 'Skip copying to clipboard')
     // No commander default: absent must be distinguishable from an explicit
     // --lines 200, or config silently overrides the user's own flag (B-08).
     .option('--lines <n>', 'Number of log lines to capture (default 200)')
     .option('--since <duration>', 'Filter git commits since duration (e.g. 1h, 1d)')
     .option('--issue', 'Generate GitHub or GitLab issue pre-fill URL for this repository')
+    .option('--create', 'With --issue, review and confirm creating a GitHub issue using gh')
     .option('--only <ids>', 'Comma-separated collector IDs to run')
     .option('--skip <ids>', 'Comma-separated collector IDs to skip')
     .option('--redact-extra <pattern...>', 'Additional regex pattern(s) to redact')
@@ -160,17 +167,25 @@ export async function runCli(argv = process.argv): Promise<number> {
   const options = program.opts<CliArgs>();
 
   // Merge defaults from .crashpackrc if present
-  let configLines: number | undefined;
-  const fileConfig = loadConfig();
-  if (fileConfig) {
-    if (!options.only && fileConfig.only) options.only = fileConfig.only.join(',');
-    if (!options.skip && fileConfig.skip) options.skip = fileConfig.skip.join(',');
-    if ((!options.redactExtra || options.redactExtra.length === 0) && fileConfig.redactExtra) {
-      options.redactExtra = fileConfig.redactExtra;
+  try {
+    const fileConfig = loadConfig();
+    if (fileConfig) {
+      if (options.only === undefined && fileConfig.only) options.only = fileConfig.only.join(',');
+      if (options.skip === undefined && fileConfig.skip) options.skip = fileConfig.skip.join(',');
+      options.redactExtra ??= fileConfig.redactExtra;
+      options.out ??= fileConfig.out;
+      if (program.getOptionValueSource('clipboard') !== 'cli') options.clipboard = fileConfig.clipboard;
     }
-    configLines = fileConfig.lines;
-  } else if (configFileFound()) {
-    warn('config file could not be parsed; using CLI options only');
+    options.lines = String(resolveLines(options.lines, fileConfig?.lines));
+    if (options.out !== undefined) {
+      if (!options.out.trim()) throw new Error('--out must be a nonempty path');
+      options.out = path.resolve(process.cwd(), options.out);
+    }
+    if (options.redactExtra?.some((pattern) => !parseRegexPattern(pattern))) throw new Error('--redact-extra: invalid pattern; check regex syntax and flags');
+    if (options.create && !options.issue) throw new Error('--create requires --issue');
+  } catch (error) {
+    warn(error instanceof Error ? error.message : 'Invalid crashpack options');
+    return 2;
   }
 
   // Validate collector IDs rather than silently producing an empty report
@@ -180,13 +195,13 @@ export async function runCli(argv = process.argv): Promise<number> {
     if (!raw) continue;
     const unknown = raw.split(',').map((s) => s.trim()).filter((s) => s && !validIds.has(s.toLowerCase()));
     if (unknown.length > 0) {
-      warn(`--${flag}: unknown collector ${unknown.join(', ')} (valid: ${[...validIds].join(', ')})`);
+      warn(`--${flag}: unknown collector ID (valid: ${[...validIds].join(', ')})`);
     }
   }
 
   // 1. Handle --wrap mode
   if (options.wrap) {
-    const lineLimit = resolveLines(options.lines, configLines);
+    const lineLimit = resolveLines(options.lines);
     const logBuffer: string[] = [];
 
     const handleChunk = (chunk: Buffer | string) => {
@@ -225,8 +240,8 @@ export async function runCli(argv = process.argv): Promise<number> {
       // Non-zero exit -> proceed to collect pack
       const wrapBuffer = logBuffer.slice(-lineLimit).join('\n');
       return await generateAndOutput({ ...options, lines: String(lineLimit) }, { wrapBuffer, exitCode: result.exitCode });
-    } catch (err: any) {
-      process.stderr.write(`\n${pc.red('Error running wrapped command:')} ${err.message}\n`);
+    } catch {
+      process.stderr.write(`\n${pc.red('Error running wrapped command.')}\n`);
       return 1;
     }
   }
@@ -237,7 +252,7 @@ export async function runCli(argv = process.argv): Promise<number> {
     stdinLog = await readStdin();
   }
 
-  return await generateAndOutput({ ...options, lines: String(resolveLines(options.lines, configLines)) }, { stdinLog });
+  return await generateAndOutput(options, { stdinLog });
 }
 
 interface ExtraContext {
@@ -256,9 +271,6 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     for (const pat of options.redactExtra) {
       const parsed = parseRegexPattern(pat);
       if (parsed) extraPatterns.push(parsed);
-      // Silently dropping this leaves the user believing a pattern protects
-      // them when it does not (B-12)
-      else warn(`--redact-extra: ignoring invalid pattern ${JSON.stringify(pat)}`);
     }
   }
 
@@ -273,8 +285,6 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     process.stderr.write(`  ${pc.yellow('●')} ${pc.dim('Scanning debug context across subsystems…')}\n\n`);
   }
 
-  const collectorStatuses: Record<string, { status: string; reason?: string }> = {};
-
   const pack = await createCrashPack({
     cwd: process.cwd(),
     lines: lineLimit,
@@ -285,9 +295,6 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     skip: skipList,
     redactExtra: extraPatterns,
     entropy: options.entropy,
-    onCollectorComplete: (id, status, reason) => {
-      collectorStatuses[id] = { status, reason };
-    },
   });
 
   if (!isSilentMode) {
@@ -311,7 +318,7 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
   // The issue URL goes to stderr on every output path, so --issue --stdout
   // and --issue --json still produce one (B-08.7).
   const printIssueUrl = (savedPath?: string) => {
-    if (!options.issue) return;
+    if (!options.issue || options.create) return;
 
     const gitSection = pack.sections.find((s) => s.id === 'git');
     const remoteMatch = (gitSection?.content || '').match(/Remote:\s*`([^`]+)`/);
@@ -323,15 +330,33 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
       return;
     }
     if (truncated) {
-      warn('report too large for a pre-filled URL; paste the full report from your clipboard');
+      warn('report too large for a pre-filled URL; review and paste the full report from the saved file or local output');
     }
     process.stderr.write(`  ${pc.bold(`🔗 ${issueInfo.platform} Issue URL:`)}\n  ${pc.underline(pc.cyan(issueInfo.url))}\n\n`);
+  };
+
+  // Creation always keeps a local report, including machine-output modes.
+  let savedForCreate: string | undefined;
+  if (options.create) {
+    const destination = options.out ?? path.join(os.tmpdir(), `crashpack-${Date.now()}.md`);
+    try {
+      fs.writeFileSync(destination, markdown, { encoding: 'utf8', mode: 0o600 });
+      savedForCreate = destination;
+    } catch {
+      warn('Could not save report; issue creation skipped. Save the local output and create an issue manually.');
+    }
+  }
+
+  const createIssue = async () => {
+    if (!options.create || !savedForCreate) return;
+    await createGithubIssue(markdown, pack.sections.find((s) => s.id === 'git')?.content, savedForCreate, isSilentMode || Boolean(options.stdin));
   };
 
   // Handle JSON output
   if (options.json) {
     process.stdout.write(JSON.stringify(pack, null, 2) + '\n');
     printIssueUrl();
+    await createIssue();
     return extra.exitCode ?? 0;
   }
 
@@ -339,6 +364,7 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
   if (options.stdout) {
     process.stdout.write(markdown + '\n');
     printIssueUrl();
+    await createIssue();
     return extra.exitCode ?? 0;
   }
 
@@ -355,14 +381,14 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
   }
 
   // Determine output file path
-  let outputPath = options.out;
+  let outputPath = savedForCreate ?? options.out;
   if (!outputPath) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     outputPath = path.join(os.tmpdir(), `crashpack-${timestamp}.md`);
   }
 
   try {
-    fs.writeFileSync(outputPath, markdown, 'utf8');
+    if (!savedForCreate) fs.writeFileSync(outputPath, markdown, { encoding: 'utf8', mode: 0o600 });
   } catch {
     // If filesystem is read-only, fallback to stdout
     process.stdout.write(markdown + '\n');
@@ -371,26 +397,84 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
 
   if (!isSilentMode) {
     const clipHeader = copiedToClipboard
-      ? `${pc.bold(pc.green('📋 COPIED TO CLIPBOARD!'))} ${pc.dim('Paste directly into GitHub / Slack / AI')}`
-      : `${pc.bold(pc.yellow('📄 REPORT SAVED'))} ${pc.dim('(Clipboard unavailable in this environment)')}`;
+      ? `${pc.bold(pc.green('📋 COPIED TO CLIPBOARD'))} ${pc.dim('Review before pasting into GitHub / Slack / AI')}`
+      : `${pc.bold(pc.yellow('📄 REPORT SAVED'))} ${pc.dim(options.clipboard === false ? '(Clipboard disabled)' : '(Clipboard unavailable in this environment)')}`;
 
     const redactNote = pack.redactionCount > 0
       ? `${pc.yellow('🛡️ ')} ${pc.bold(pack.redactionCount.toString())} sensitive value${pack.redactionCount === 1 ? '' : 's'} masked as [redacted]`
-      : `${pc.green('🛡️ ')} Zero sensitive leaks detected (diffs & logs verified safe)`;
+      : 'No sensitive values matched the redaction rules';
 
     process.stderr.write(`${pc.cyan('╭──────────────────────────────────────────────────────────────────────────╮')}\n`);
     process.stderr.write(`${pc.cyan('│')}  ${clipHeader}\n`);
     process.stderr.write(`${pc.cyan('│')}\n`);
     process.stderr.write(`${pc.cyan('│')}  ${redactNote}\n`);
-    process.stderr.write(`${pc.cyan('│')}  ${pc.dim('📁 Backup file:')} ${pc.cyan(outputPath)}\n`);
-    process.stderr.write(`${pc.cyan('│')}  ${pc.dim('⚡')} ${pc.magenta('Built by Poorvith')} ${pc.dim('· 100% local-first (0 network calls)')}\n`);
+    process.stderr.write(`${pc.cyan('│')}  ${pc.dim('📁 Backup file:')} ${pc.cyan(displayOutputPath(outputPath))}\n`);
+    process.stderr.write(`${pc.cyan('│')}  ${pc.dim('Redaction can miss secrets. Review the report before sharing.')}\n`);
     process.stderr.write(`${pc.cyan('╰──────────────────────────────────────────────────────────────────────────╯')}\n\n`);
 
   }
 
   printIssueUrl(outputPath);
+  await createIssue();
 
   return extra.exitCode ?? 0;
+}
+
+function displayOutputPath(outputPath: string): string {
+  const relative = path.relative(process.cwd(), outputPath);
+  if (path.dirname(outputPath) === os.tmpdir()) return `[system temp]/${path.basename(outputPath).replace(/[\r\n\x1b]/g, '')}`;
+  return relative && !relative.startsWith('..') && !path.isAbsolute(relative)
+    ? `./${relative.replace(/[\r\n\x1b]/g, '')}`
+    : '[local report file at the selected output path or in the system temp directory]';
+}
+
+async function createGithubIssue(markdown: string, gitContent: string | undefined, savedPath: string, machineOutput: boolean): Promise<void> {
+  const recovery = 'The full local report is retained. Review it and create an issue manually.';
+  if (markdown.length > 65_536) {
+    warn(`Report too large for a GitHub issue body (65,536 characters). ${recovery}`);
+    return;
+  }
+  if (machineOutput || !process.stdin.isTTY || !process.stderr.isTTY) {
+    warn(`Issue creation needs an interactive terminal without --stdout, --json or --stdin. ${recovery}`);
+    return;
+  }
+  const remote = gitContent?.match(/Remote:\s*`([^`]+)`/)?.[1];
+  const issue = extractIssueUrl(remote);
+  if (issue?.platform !== 'GitHub') {
+    warn(`--create requires a GitHub remote. ${recovery}`);
+    return;
+  }
+  const repo = new URL(issue.url).pathname.split('/').slice(1, 3).join('/');
+  const ghEnv = { GH_HOST: 'github.com', GH_PROMPT_DISABLED: '1' };
+  process.stderr.write(`\nReview the complete report before sharing; redaction can miss secrets.\n${markdown}\n`);
+  try {
+    await execa('gh', ['--version'], { shell: false, timeout: 10_000, env: ghEnv });
+    await execa('gh', ['auth', 'status', '--hostname', 'github.com'], { shell: false, timeout: 10_000, env: ghEnv });
+  } catch {
+    warn(`gh is unavailable or not authenticated. Install GitHub CLI and run gh auth login. ${recovery}`);
+    return;
+  }
+  const input = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    const title = (await input.question('Issue title: ')).trim();
+    if (!title || /[\r\n\x00-\x1f]/.test(title)) {
+      warn(`A nonempty single-line title is required. ${recovery}`);
+      return;
+    }
+    const confirmation = await input.question(`Upload this report to github.com/${repo}? Type yes to confirm: `);
+    if (confirmation.trim().toLowerCase() !== 'yes') {
+      warn(`Issue creation cancelled. ${recovery}`);
+      return;
+    }
+    // Restore the exact reviewed content in case the file changed during review.
+    fs.writeFileSync(savedPath, markdown, { encoding: 'utf8', mode: 0o600 });
+    await execa('gh', ['issue', 'create', '--repo', repo, '--title', title, '--body-file', savedPath], { shell: false, timeout: 30_000, env: ghEnv });
+    process.stderr.write(`Issue created in https://github.com/${repo}/issues.\n`);
+  } catch {
+    warn(`Issue creation did not complete. Check the repository before retrying to avoid duplicates. ${recovery}`);
+  } finally {
+    input.close();
+  }
 }
 
 // Auto-run if executed directly as script

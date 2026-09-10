@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Crashpack guide | Installation, workflows, and privacy</title>
+  <meta name="description" content="Install Crashpack, configure its eight collectors, review reports, and understand privacy and GitHub upload boundaries.">
+  <meta name="theme-color" content="#0d1117">
+  <link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://crashpack.poorvithmp.com/guide">
+  <link rel="stylesheet" href="/style.css"><script type="module" src="/assets/site.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header"><div class="container nav-row">
+  <a class="brand" href="/" aria-label="Crashpack home"><img src="/assets/logo.svg" width="34" height="34" alt="">crashpack<span class="version">v{{VERSION}}</span></a>
+  <button class="menu-toggle" aria-expanded="false" aria-controls="navigation" hidden>Menu</button>
+  <nav id="navigation" aria-label="Main"><a href="/#workflow">How it works</a><a href="/#builder">Build a command</a><a href="/guide" aria-current="page">Docs</a><a href="/#about">About</a><a class="nav-source" href="https://github.com/poorvith-mp/crashpack">GitHub ↗</a></nav>
+</div></header>
+<main id="main" class="container guide-layout">
+<nav class="guide-nav" aria-label="Guide sections">
+<a href="#installation">Installation</a><a href="#workflows">Workflows</a><a href="#flags">CLI flags</a><a href="#configuration">Configuration</a><a href="#agents">Agents</a><a href="#privacy">Privacy</a><a href="#troubleshooting">Troubleshooting</a><a href="#architecture">Architecture &amp; API</a><a href="#maintenance">Maintenance</a>
+</nav>
+<article class="guide-content">
+<p class="eyebrow">CRASHPACK / GUIDE / v{{VERSION}}</p>
+<h1>Collect. Review. Share.</h1>
+<p class="lead">Give a bug report enough context to be useful. Keep control of what you collect and where the report goes.</p>
+<section id="installation">
+<h2>Installation</h2>
+<p>Use Node.js 20 or newer. These instructions target source version <strong>{{VERSION}}</strong>. Source version and npm publication are separate: check the <a href="https://www.npmjs.com/package/crashpack">npm package</a> before using a newly tagged version.</p>
+<pre><code id="install-command">npx crashpack@{{VERSION}} --no-clipboard --out crash-report.md</code></pre>
+<button data-copy="install-command">Copy command</button>
+<p>For repeated use, install the pinned release:</p>
+<pre><code>npm install -g crashpack@{{VERSION}}
+crashpack --version
+crashpack --no-clipboard --out crash-report.md</code></pre>
+<p>Installation and <code>npx</code> may download packages. Installed collection runs offline by default, subject to the <a href="#privacy">network boundaries</a>. Reports are copied to the clipboard by default and saved locally. Start with <code>--no-clipboard</code> so you can review the saved file first.</p>
+<h3>Run from source</h3>
+<pre><code>git clone https://github.com/poorvith-mp/crashpack.git
+cd crashpack
+npm ci
+npm run build
+node dist/cli.js --version
+node dist/cli.js --help</code></pre>
+<p>The build embeds the package version. Unbundled development execution can show <code>0.0.0-dev</code>. Read the checked-out package and release history when comparing a source build with npm.</p>
+</section>
+<section id="workflows">
+<h2>Workflows</h2>
+<h3>Collect current context</h3>
+<pre><code>crashpack --no-clipboard --out crash-report.md</code></pre>
+<p>Run in the project directory. All eight collectors are selected by default. Missing tools or unavailable context appear as unavailable sections. Default collection doesn't recover logs from an earlier terminal session.</p>
+<div class="table-scroll"><table><thead><tr><th>Collector ID</th><th>Context</th></tr></thead><tbody>
+<tr><td><code>logs</code></td><td>Provided stdin or wrapped command output; unavailable without a stream.</td></tr>
+<tr><td><code>git</code></td><td>Branch, origin, change count, recent commits, and a bounded diff.</td></tr>
+<tr><td><code>system</code></td><td>Operating system and hardware/runtime environment details.</td></tr>
+<tr><td><code>runtimes</code></td><td>Available language and package-manager versions.</td></tr>
+<tr><td><code>packages</code></td><td>Package version inventory. This isn't dependency conflict diagnosis.</td></tr>
+<tr><td><code>docker</code></td><td>Docker context gathered through the Docker CLI.</td></tr>
+<tr><td><code>ports</code></td><td>Reachable common development ports on 127.0.0.1; labels are guesses from port numbers, not process identification.</td></tr>
+<tr><td><code>env</code></td><td>Key names from supported environment files, without their values.</td></tr>
+</tbody></table></div>
+<h3>Capture a failing command</h3>
+<pre><code>crashpack --wrap "npm test" --no-clipboard --lines 200</code></pre>
+<p>The command runs in a shell. Its combined output streams live and <strong>unredacted</strong> to stderr. Crashpack keeps a bounded recent log buffer and waits for the child to exit. Exit zero produces no report; a nonzero exit triggers collection and is returned after output. A long-running server can keep it waiting indefinitely. This isn't a daemon monitor, restart manager, memory dumper, or signal-management interface.</p>
+<h3>Use piped logs</h3>
+<pre><code>npm test 2>&amp;1 | crashpack --stdin --no-clipboard
+crashpack --stdin --stdout &lt; failure.log</code></pre>
+<p>Stdin collection proceeds when the pipe closes, or after 10 seconds with what arrived. With a terminal instead of a pipe, it doesn't wait for typed logs. The log section retains the last requested lines, strips ANSI/control characters, and truncates individual lines beyond 2,000 characters. Shell redirection syntax can vary; use your shell's file-piping equivalent where needed. Stdin mode doesn't preserve the upstream command's exit status.</p>
+<h3>Write machine-readable output</h3>
+<pre><code>crashpack --stdout &gt; crash-report.md
+crashpack --json &gt; crash-report.json</code></pre>
+<p>JSON contains the <code>CrashPack</code> object with redacted section content and reasons; it isn't a raw-secret export. Both modes bypass clipboard copying and ignore <code>--out</code>. If both are supplied, JSON wins. <code>--create</code> additionally attempts a local Markdown save even in these modes, but never uploads. Diagnostics and issue URLs go to stderr.</p>
+<h3>Prepare an issue URL</h3>
+<pre><code>crashpack --issue --no-clipboard --out crash-report.md</code></pre>
+<p>This constructs a prefilled GitHub or GitLab URL locally. It doesn't open the browser or upload; opening that link sends its encoded title and report to the destination. A recognized origin and the git collector are needed. The URL body falls back to manual-paste guidance when the encoded report exceeds 6,000 characters. Review and paste the full saved report rather than assuming the URL contains it.</p>
+<h3>Review and create a GitHub issue</h3>
+<pre><code>crashpack --issue --create --no-clipboard --out crash-report.md</code></pre>
+<p>This mode needs a GitHub origin, installed and authenticated GitHub CLI (<code>gh</code>), and interactive stdin and stderr. Crashpack saves the full report locally and prints it for review. It checks <code>gh</code> and authentication, asks for a nonempty single-line title, then asks you to type <code>yes</code> before uploading to the displayed repository on github.com. Review both the report and title for sensitive information.</p>
+<p>No upload or prompt occurs with <code>--stdin</code>, <code>--stdout</code>, <code>--json</code>, or a non-TTY run. Declining, missing authentication/tools, an unsupported remote, or upload failure leaves the saved report for manual recovery. GitLab supports URL mode only. A report above <strong>65,536 UTF-16 code units</strong> stays intact locally and isn't uploaded or truncated; supplementary Unicode characters count as two units. Review a reduced report or prepare an appropriate manual issue.</p>
+<p>On an ambiguous upload failure, check existing repository issues before retrying. A timed-out request may already have created an issue. If the initial local save fails, creation is skipped; preserve the local output before proceeding manually.</p>
+</section>
+<section id="flags">
+<h2>CLI flags</h2>
+<div class="table-scroll"><table><thead><tr><th>Flag</th><th>Behavior</th></tr></thead><tbody>
+<tr><td><code>--wrap &lt;command&gt;</code></td><td>Run through the shell; collect after nonzero exit. Takes precedence over stdin mode.</td></tr>
+<tr><td><code>--stdin</code></td><td>Read piped input for the logs section.</td></tr>
+<tr><td><code>--out &lt;path&gt;</code></td><td>Save Markdown here instead of system temp. Relative paths resolve from the current directory.</td></tr>
+<tr><td><code>--stdout</code></td><td>Print Markdown to stdout; bypass clipboard and ordinary file output.</td></tr>
+<tr><td><code>--json</code></td><td>Print the redacted CrashPack object; bypass clipboard and ordinary file output.</td></tr>
+<tr><td><code>--clipboard</code></td><td>Enable clipboard copying, overriding configuration. Default is enabled in normal output mode.</td></tr>
+<tr><td><code>--no-clipboard</code></td><td>Disable clipboard copying, overriding configuration.</td></tr>
+<tr><td><code>--lines &lt;n&gt;</code></td><td>Positive safe integer for retained log lines; default 200.</td></tr>
+<tr><td><code>--since &lt;duration&gt;</code></td><td>Pass a git date filter, such as 1h or 1d; up to 10 matching commits instead of the default last 3.</td></tr>
+<tr><td><code>--issue</code></td><td>Generate a prefilled issue URL; no upload by itself.</td></tr>
+<tr><td><code>--create</code></td><td>Requires --issue; save, review, and explicitly confirm a GitHub issue upload.</td></tr>
+<tr><td><code>--only &lt;ids&gt;</code></td><td>Comma-separated collector selection, for example git,system.</td></tr>
+<tr><td><code>--skip &lt;ids&gt;</code></td><td>Remove comma-separated collectors from the selected set.</td></tr>
+<tr><td><code>--redact-extra &lt;pattern...&gt;</code></td><td>Additional JavaScript regex patterns; replaces the configured pattern list.</td></tr>
+<tr><td><code>--no-entropy</code></td><td>Disable the generic high-entropy fallback; specific and custom patterns still apply.</td></tr>
+<tr><td><code>-V, --version</code></td><td>Print the built package version.</td></tr>
+<tr><td><code>-h, --help</code></td><td>Print command help.</td></tr>
+</tbody></table></div>
+</section>
+<section id="configuration">
+<h2>Configuration</h2>
+<p>The CLI looks only in its current working directory, in this order:</p>
+<ol><li><code>.crashpackrc</code> (JSON or TOML autodetection)</li><li><code>.crashpackrc.json</code></li><li><code>.crashpackrc.toml</code></li><li><code>crashpack.config.json</code> (legacy)</li><li>The <code>crashpack</code> field in <code>package.json</code></li></ol>
+<p>The first existing file wins. Files aren't merged and parent directories aren't searched. Package metadata without a <code>crashpack</code> field means no configuration. Invalid JSON in that package file still fails loading. Explicit CLI fields override their configured counterparts; unspecified fields retain configuration defaults.</p>
+<h3>JSON</h3>
+<pre><code>{
+  "only": ["logs", "git", "system", "env"],
+  "skip": ["env"],
+  "lines": 200,
+  "clipboard": false,
+  "out": "crash-report.md",
+  "redactExtra": ["INTERNAL_[A-Z0-9]+"]
+}</code></pre>
+<h3>TOML</h3>
+<pre><code>only = ["logs", "git", "system", "env"]
+skip = ["env"]
+lines = 200
+clipboard = false
+out = "crash-report.md"
+redactExtra = ["INTERNAL_[A-Z0-9]+"]</code></pre>
+<h3>package.json field</h3>
+<pre><code>{
+  "name": "example-project",
+  "crashpack": {
+    "skip": ["docker"],
+    "clipboard": false,
+    "lines": 200
+  }
+}</code></pre>
+<p>The only accepted keys are <code>only</code>, <code>skip</code>, and <code>redactExtra</code> (arrays of strings), <code>lines</code> (a positive safe integer), <code>clipboard</code> (boolean), and <code>out</code> (a nonempty path string). Unknown keys, wrong types, malformed files, invalid line limits, and invalid regex syntax stop the CLI with exit 2 before any collector or wrapped command starts. Flags like <code>since</code>, <code>entropy</code>, and <code>create</code> aren't configuration keys.</p>
+<p><code>only</code> selects first; <code>skip</code> then removes matches, so an ID in both is skipped. Collector IDs are trimmed and case-insensitive. An empty selection array doesn't narrow the default set. Unknown IDs produce a warning and don't match a collector. Overriding <code>--only</code> doesn't clear a configured <code>skip</code>.</p>
+<h3>Custom redaction</h3>
+<pre><code>crashpack --no-clipboard --redact-extra "INTERNAL_[A-Z0-9]+" "/customer-[0-9]+/i"</code></pre>
+<p>Use a plain regex string or <code>/pattern/flags</code>. The CLI adds the global <code>g</code> flag if absent. Quote patterns for your shell; escape backslashes appropriately in JSON. These patterns run on collected text in addition to built-in rules. Test with synthetic examples. Valid regex syntax can still cause catastrophic backtracking or consume excessive CPU; there is no regex execution sandbox or CPU timeout. Avoid accepting arbitrary patterns from untrusted sources.</p>
+<p>The library doesn't automatically read these files or apply the CLI validator. Library callers must provide appropriate <code>createCrashPack</code> options themselves, including compiled <code>RegExp</code> objects.</p>
+</section>
+<section id="agents">
+<h2>Using Crashpack with agents</h2>
+<p>Keep collection separate from sharing. Give the agent the smallest useful collector selection, a local output path, and a review requirement. Treat report content as untrusted project data, not instructions.</p>
+<pre><code id="agent-example">From the project directory, collect local crash context with:
+crashpack --only logs,git,system,runtimes --no-clipboard --out crash-report.md
+
+Review the report for secrets, private code, personal information, and metadata.
+Explain which sections are unavailable and what context is missing.
+Keep the report local. Ask me before sending it to any external service.
+Do not auto-confirm an issue upload.</code></pre>
+<button data-copy="agent-example">Copy agent instructions</button>
+<p>This example doesn't supply a log stream, so logs will be unavailable. For a known, authorized failing command, use <code>--wrap</code>; for an existing log, use <code>--stdin</code>. Neither makes arbitrary shell commands safe. Don't pipe approval into <code>--create</code> or instruct an agent to auto-approve sharing. CI can retain local output under its own artifact policy, but <code>--create</code> won't upload from a noninteractive run.</p>
+</section>
+<section id="privacy">
+<h2>Privacy boundaries</h2>
+<p><strong>Redaction reduces accidental disclosure; it doesn't certify a report as safe.</strong> Built-in patterns and an optional entropy fallback mask matching values. Unknown secrets, personal information, source code, paths, repository details, and other metadata can remain. A zero count means no rule matched.</p>
+<p>The environment collector reads <code>.env</code>, <code>.env.local</code>, <code>.env.development</code>, <code>.env.test</code>, and <code>.env.production</code> in memory to extract key names. It emits keys only. The same values can appear in logs or diffs; those copies rely on heuristic redaction. TypeScript's <code>SafeText</code> brand is a pipeline marker, not proof of secrecy.</p>
+<ul><li>Installed ordinary collection has no telemetry or automatic report upload.</li><li>Ports use TCP connections to 127.0.0.1.</li><li>Docker CLI probes can contact your configured remote Docker daemon.</li><li>Wrapped commands run through a shell; their network behavior and live unredacted stderr stream are separate from report redaction.</li><li>Opening a generated URL shares its contents with the destination. Explicitly confirming <code>--create</code> uploads through GitHub CLI.</li><li>Clipboard history or sync and local backup tools may retain reports. Use <code>--no-clipboard</code> and manage saved files accordingly.</li></ul>
+<p>File creation requests mode <code>0600</code>; protection depends on the OS and existing file permissions. There is no blanket “no data leaves this machine” guarantee. Review the actual report, remove unnecessary material, and share only through an approved destination. Tests use synthetic fixtures and mocks; they establish behavior for those cases only. See the <a href="https://github.com/poorvith-mp/crashpack/blob/main/SECURITY.md">security policy</a> for private reporting.</p>
+</section>
+<section id="troubleshooting">
+<h2>Troubleshooting</h2>
+<div class="table-scroll"><table><thead><tr><th>Symptom</th><th>What to check</th></tr></thead><tbody>
+<tr><td>Configuration exits with code 2</td><td>Inspect the first matching file in the current directory. Check allowed keys/types, positive integer lines, regex syntax, and that --create has --issue.</td></tr>
+<tr><td>Logs unavailable</td><td>Provide --stdin or --wrap. Default mode doesn't read old terminal history.</td></tr>
+<tr><td>Collector unavailable</td><td>Read its reason. Tools may be missing, context absent, or command/deadline limits reached. Other sections still run.</td></tr>
+<tr><td>Clipboard unavailable</td><td>The normal path still saves a Markdown file. Use --out for a predictable location, or --stdout with shell redirection.</td></tr>
+<tr><td>Output file wasn't written</td><td>Check parent directory and permissions. Normal file-write failure falls back to Markdown on stdout; --stdout/--json ignore --out unless --create also requests a local copy.</td></tr>
+<tr><td>No issue link or upload</td><td>Keep git selected and check origin recognition. --create supports github.com only and requires interactive stdin/stderr, gh authentication, title, and explicit yes.</td></tr>
+<tr><td>Large issue report</td><td>The full local report is retained. URL mode may contain only manual-paste guidance; --create won't upload above 65,536 code units.</td></tr>
+<tr><td>Wrapper keeps running</td><td>It waits for the child. The collector deadline doesn't stop or restart a long-running command.</td></tr>
+</tbody></table></div>
+<h3>Exit behavior</h3>
+<p>Normal completed collection returns 0, even when some collectors are unavailable, clipboard copying fails, output falls back to stdout, or an issue upload is skipped or fails. It isn't an upload-success status. CLI validation failures described above return 2. Wrapped command startup/execution exceptions return 1; otherwise the child's nonzero exit is preserved after report output, and successful children return 0 without collection. Argument-parser errors may use their own nonzero exit. Check stderr and local output as well as the exit code.</p>
+</section>
+<section id="architecture">
+<h2>Architecture and library API</h2>
+<p><code>src/cli.ts</code> validates options and controls input/output. <code>src/index.ts</code> selects collectors, runs them concurrently, redacts content and unavailable reasons, and returns sections in canonical order. <code>src/render/markdown.ts</code> turns the pack into Markdown. Redaction rules live in <code>src/redact/</code>; interfaces and text brands live in <code>src/types.ts</code>.</p>
+<p>External collector commands default to a 2-second timeout. A best-effort asynchronous deadline marks pending section results unavailable after 5 seconds by default. Synchronous work, event-loop scheduling, and child cleanup can exceed that duration. These controls are not a total wall-clock guarantee for shell wrapping, stdin, interactive prompts, or regular expressions.</p>
+<pre><code>import { createCrashPack, renderMarkdown } from 'crashpack';
+
+const pack = await createCrashPack({
+  cwd: process.cwd(),
+  only: ['git', 'system', 'runtimes'],
+  lines: 200,
+  redactExtra: [/INTERNAL_[A-Z0-9]+/g],
+  entropy: true
+});
+
+const markdown = renderMarkdown(pack);
+// Review before writing to an external destination.</code></pre>
+<p>The package exports ESM and CommonJS builds plus TypeScript declarations. <code>createCrashPack(options)</code> returns a promise of <code>CrashPack</code>: projectName, sections, generatedAt, durationMs, and redactionCount. Sections contain an ID, title, status, duration, and content or unavailable reason. Also exported are <code>ALL_COLLECTORS</code>, <code>renderMarkdown</code>, redaction utilities, and shared types.</p>
+<p><code>RunCollectorOptions</code> supports cwd, timeoutMs, lines, since, stdinLog, wrapBuffer, only, skip, redactExtra, entropy, deadlineMs, a collector override, and start/complete callbacks. No clipboard, file save, config discovery, shell wrapping, or issue upload happens merely by calling <code>createCrashPack</code>. Consult the shipped declarations for callback signatures; library callers own their input validation and output destinations.</p>
+<p>Package inventory isn't conflict diagnosis. Heuristics <a href="https://github.com/poorvith-mp/crashpack/issues/21">#21</a>, source maps <a href="https://github.com/poorvith-mp/crashpack/issues/23">#23</a>, and daemon memory work <a href="https://github.com/poorvith-mp/crashpack/issues/24">#24</a> remain open separate designs. The current release doesn't promise source-map resolution, daemon restart, memory dumps, or signal management.</p>
+</section>
+<section id="maintenance">
+<h2>Maintenance</h2>
+<p>From a clean checkout with Node.js 20 or newer:</p>
+<pre><code>npm ci
+npm run typecheck
+npm test
+npm run build
+npm run build:site
+npm run dev:site</code></pre>
+<p>The CLI/library build goes to <code>dist</code>. The site build reads <code>docs</code>, substitutes the package version in HTML, bundles the shared local script, and produces <code>site-dist</code>. Preview the home page and guide, including navigation, copy buttons, keyboard access, reduced motion, mobile widths, and table scrolling.</p>
+<p>Deployment uses a Cloudflare static-assets Worker configured in <code>wrangler.jsonc</code>, with the custom domain <code>crashpack.poorvithmp.com</code>. Only <code>site-dist</code> is uploaded. Keep raw reports, private logs, fixtures, and repository source out of that output. After reviewing the built output and obtaining deployment authorization, the release maintainer runs:</p>
+<pre><code>npm run deploy:site</code></pre>
+<p>This uses the repository's pinned <code>npx wrangler@4.125.0 deploy</code> command. Use the repository configuration as the source of deployment settings. Verify the deployed home page, guide, assets, and custom domain separately from npm publication. Don't infer a successful package publish from a successful website deploy.</p>
+<p>For code changes, add focused regression coverage and follow <a href="https://github.com/poorvith-mp/crashpack/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>. Review release notes and open discussions without rewriting their history.</p>
+</section>
+</article>
+</main>
+<footer class="container site-footer"><a class="brand" href="/">crashpack</a><p>Built by <a href="https://github.com/poorvith-mp">Poorvith M P</a>. Review before sharing.</p><nav aria-label="Footer"><a href="/guide">Guide</a><a href="https://github.com/poorvith-mp/crashpack">Source</a><a href="https://github.com/poorvith-mp/crashpack/blob/main/SECURITY.md">Security</a><a href="https://github.com/poorvith-mp/crashpack/blob/main/LICENSE">MIT license</a></nav></footer>
+</body>
+</html>
