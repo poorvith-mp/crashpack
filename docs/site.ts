@@ -1,4 +1,7 @@
 import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
 
 // This entry is website-only. It never imports the collection CLI.
 document.documentElement.classList.add('js-ready');
@@ -94,89 +97,61 @@ if (form) {
   update();
 }
 
-const stage = document.querySelector<HTMLElement>('.pack-stage');
 const toggle = document.querySelector<HTMLButtonElement>('#motion-toggle');
-if (stage && toggle) {
+if (toggle) {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  let pausedByUser = false;
-  let visible = true;
-  let stopMotion: (() => void) | undefined;
+  let paused = false;
+  let cleanup: (() => void) | undefined;
+  let demo: gsap.core.Timeline | undefined;
   const setup = () => {
-    stopMotion?.();
-    stopMotion = undefined;
+    cleanup?.();
+    demo = undefined;
     toggle.hidden = reduced.matches;
-    if (reduced.matches) return;
-    toggle.setAttribute('aria-pressed', String(pausedByUser));
-    toggle.textContent = pausedByUser ? 'Resume motion' : 'Pause motion';
-    if (pausedByUser) return;
-    const animations: gsap.core.Animation[] = [];
+    toggle.textContent = paused ? 'Resume motion' : 'Pause motion';
+    toggle.setAttribute('aria-pressed', String(paused));
+    document.documentElement.dataset.motion = reduced.matches || paused ? 'off' : 'on';
+    const replay = document.querySelector<HTMLButtonElement>('.replay-demo');
+    if (replay) replay.disabled = reduced.matches || paused;
+    if (reduced.matches || paused) return;
     const context = gsap.context(() => {
-      const loop = gsap.timeline({ repeat: -1, repeatDelay: 1.5 });
-      loop.set('.stage-phase', { textContent: 'COLLECT / EXAMPLE' }, 0)
-        .set('.stage-count', { textContent: '01 / 03' }, 0)
-        .set('.report-mini .masked', { opacity: .35 }, 0)
-        .to('.slip-log', { x: 18, y: 16, rotation: -4, duration: 1.5, ease: 'power2.inOut' }, 0)
-        .to('.slip-git', { x: -15, y: -12, rotation: 3, duration: 1.5, ease: 'power2.inOut' }, 0)
-        .to('.report-object', { y: -10, rotationY: -10, duration: 1.5, ease: 'power2.inOut' }, 0)
-        .set('.stage-phase', { textContent: 'REDACT / EXAMPLE' }, 1.5)
-        .set('.stage-count', { textContent: '02 / 03' }, 1.5)
-        .to('.report-mini .masked', { opacity: 1, duration: .6 }, 1.5)
-        .set('.stage-phase', { textContent: 'REPORT / REVIEW' }, 2.2)
-        .set('.stage-count', { textContent: '03 / 03' }, 2.2)
-        .to('.slip-log', { x: 0, y: 0, rotation: -11, duration: 1.5, ease: 'power2.inOut' }, 2.2)
-        .to('.slip-git', { x: 0, y: 0, rotation: 9, duration: 1.5, ease: 'power2.inOut' }, 2.2)
-        .to('.report-object', { y: 0, rotationY: -18, duration: 1.5, ease: 'power2.inOut' }, 2.2);
-      animations.push(loop);
+      gsap.from('.hero-line', { yPercent: 100, opacity: 0, stagger: .12, duration: 1, ease: 'power4.out', clearProps: 'all' });
+      gsap.from('.hero-copy .lead, .hero-copy .install, .hero-links', { y: 24, opacity: 0, stagger: .1, delay: .35, duration: .8, clearProps: 'all' });
+      demo = gsap.timeline({ repeat: -1, repeatDelay: 3 });
+      demo.fromTo('.demo-source', { y: -25, opacity: 0 }, { y: 0, opacity: 1, duration: .6 })
+        .set('.demo-phase', { textContent: 'Gather the context' }, 0)
+        .fromTo('.bridge-line', { scaleX: 0 }, { scaleX: 1, duration: .6, stagger: .15 }, .4)
+        .fromTo('.report-rows p', { x: 45, opacity: 0 }, { x: 0, opacity: 1, stagger: .18, duration: .55 }, .8)
+        .set('.demo-phase', { textContent: 'Mask matching values' }, 1.7)
+        .fromTo('.demo-mask', { opacity: 0 }, { opacity: 1, duration: .3 }, 2)
+        .to('.demo-secret', { opacity: .3, duration: .4 }, 2)
+        .set('.demo-phase', { textContent: 'Your report. Your review.' }, 2.8)
+        .fromTo('.report-review', { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: .5 }, 2.8)
+        .fromTo('.demo-report', { rotation: -3 }, { rotation: 0, duration: 1, ease: 'power3.out' }, 2.5);
+      gsap.utils.toArray<HTMLElement>('.reveal').forEach(el => {
+        gsap.from(el, { y: 50, opacity: .15, duration: .9, ease: 'power3.out', clearProps: 'all', scrollTrigger: { trigger: el, start: 'top 92%', once: true } });
+      });
+      const story = gsap.timeline({ scrollTrigger: { trigger: '.workflow-story', start: 'top 65%', end: 'bottom 85%', scrub: .6 } });
+      story.from('.story-document', { rotation: -7, y: 65, duration: 1 })
+        .from('.story-row', { x: 70, opacity: 0, stagger: .2, duration: .5 }, 0)
+        .to('.story-password span', { opacity: 0, duration: .15 }, 1.35)
+        .set('.story-password span', { textContent: '[redacted]' }, 1.5)
+        .to('.story-password span', { opacity: 1, duration: .15 }, 1.5)
+        .from('.story-stamp', { y: 25, opacity: 0, duration: .5 }, 2)
+        .to('.story-document', { rotation: 3, duration: .5 }, 2);
+      gsap.to('.portrait-wrap img', { yPercent: -7, ease: 'none', scrollTrigger: { trigger: '.about-section', start: 'top bottom', end: 'bottom top', scrub: .8 } });
+      gsap.from('.sample-report', { rotation: 3, y: 50, ease: 'none', scrollTrigger: { trigger: '.sample-layout', start: 'top bottom', end: 'center center', scrub: .6 } });
     });
-    const playState = () => animations.forEach(animation => animation.paused(document.hidden || !visible));
-    const stageObserver = new IntersectionObserver(entries => { visible = entries[0].isIntersecting; playState(); });
-    stageObserver.observe(stage);
-    const reveals = new IntersectionObserver(entries => {
-      for (const entry of entries) if (entry.isIntersecting) {
-        // Contents are visible by default, including when JS or GSAP fails.
-        context.add(() => gsap.from(entry.target, { y: 25, opacity: .35, duration: .75, ease: 'power2.out', clearProps: 'transform,opacity' }));
-        reveals.unobserve(entry.target);
-      }
-    }, { threshold: .12 });
-    document.querySelectorAll('.reveal').forEach(el => reveals.observe(el));
-    const redactObserver = new IntersectionObserver(entries => {
-      if (!entries[0].isIntersecting) return;
-      context.add(() => {
-        const demo = gsap.timeline();
-        demo.to('.scan-line', { opacity: 1, left: '98%', duration: 1.3, ease: 'power1.inOut' })
-          .set('.secret-example', { display: 'none' }, .65)
-          .set('.redacted-example', { display: 'inline' }, .65)
-          .to('.scan-line', { opacity: 0, duration: .25 });
-      });
-      redactObserver.disconnect();
-    }, { threshold: .7 });
-    const redaction = document.querySelector('.redaction-demo');
-    if (redaction) redactObserver.observe(redaction);
-    let frame = 0;
-    const setParallax = gsap.quickSetter('.stage-grid', 'y', 'px');
-    const scroll = () => {
-      if (frame || document.hidden || !visible) return;
-      frame = requestAnimationFrame(() => {
-        frame = 0;
-        const distance = Math.max(-30, Math.min(30, -stage.getBoundingClientRect().top * .06));
-        setParallax(distance);
-      });
-    };
-    window.addEventListener('scroll', scroll, { passive: true });
+    let visible = true;
+    const playState = () => demo?.paused(document.hidden || !visible);
+    const observer = new IntersectionObserver(entries => { visible = entries[0].isIntersecting; playState(); });
+    observer.observe(document.querySelector('.pack-stage')!);
     document.addEventListener('visibilitychange', playState);
-    playState();
-    stopMotion = () => {
-      stageObserver.disconnect(); reveals.disconnect(); redactObserver.disconnect();
-      window.removeEventListener('scroll', scroll);
-      document.removeEventListener('visibilitychange', playState);
-      cancelAnimationFrame(frame);
-      setParallax(0);
-      context.revert();
-    };
+    cleanup = () => { observer.disconnect(); document.removeEventListener('visibilitychange', playState); context.revert(); };
   };
-  toggle.addEventListener('click', () => { pausedByUser = !pausedByUser; setup(); });
+  toggle.addEventListener('click', () => { paused = !paused; setup(); });
+  document.querySelector('.replay-demo')?.addEventListener('click', () => { demo?.restart(); });
   reduced.addEventListener('change', setup);
-  window.addEventListener('pagehide', () => { stopMotion?.(); clearTimeout(statusTimer); });
+  window.addEventListener('pagehide', () => { cleanup?.(); clearTimeout(statusTimer); });
   window.addEventListener('pageshow', event => { if (event.persisted) setup(); });
   setup();
 }

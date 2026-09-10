@@ -19,7 +19,7 @@ for (const file of ['index.html', 'guide.html', '404.html', 'style.css', '_heade
 }
 await cp('docs/assets', 'site-dist/assets', { recursive: true });
 const bytes = gzipSync(await readFile('site-dist/assets/site.js')).length;
-if (bytes > 40 * 1024) throw new Error(`Website script exceeds 40 KiB gzip: ${bytes}`);
+if (bytes > 48 * 1024) throw new Error(`Website script exceeds 48 KiB gzip: ${bytes}`);
 const commit = process.env.CF_PAGES_COMMIT_SHA || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 await writeFile('site-dist/build.json', JSON.stringify({ version, commit, scriptGzipBytes: bytes }, null, 2));
-console.log(`Website built: ${version}; ${commit}; complete script ${bytes} bytes gzip (40 KiB budget).`);
+console.log(`Website built: ${version}; ${commit}; complete script ${bytes} bytes gzip (48 KiB budget).`);
