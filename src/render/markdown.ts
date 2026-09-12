@@ -1,40 +1,24 @@
 import { CrashPack } from '../types.js';
-import { fenceFor } from './fence.js';
+import { renderDefault } from './templates/default.js';
+import { renderMinimal } from './templates/minimal.js';
+import { renderEnvinfo } from './templates/envinfo.js';
 
-export function renderMarkdown(pack: CrashPack): string {
-  const durationSec = (pack.durationMs / 1000).toFixed(1);
-  const redactionLabel = `${pack.redactionCount} value${pack.redactionCount === 1 ? '' : 's'} redacted`;
-  const header = `# crashpack · ${pack.projectName}\n_${pack.generatedAt} · collected in ${durationSec}s · ${redactionLabel}_\n`;
-
-  const sectionBlocks: string[] = [];
-
-  for (const section of pack.sections) {
-    // Edge case: No .env -> Environment section omitted entirely
-    if (section.id === 'env' && section.status === 'unavailable') {
-      continue;
-    }
-
-    // Edge case: No logs provided in normal run -> omit or show unavailable if explicitly requested
-    if (section.id === 'logs' && section.status === 'unavailable') {
-      continue;
-    }
-
-    if (section.status === 'ok' && section.content) {
-      // Logs are raw captured output: fence them so a crafted line cannot
-      // forge a heading or close the block (B-04).
-      if (section.id === 'logs') {
-        const fence = fenceFor(section.content);
-        sectionBlocks.push(`## ${section.title}\n\n${fence}\n${section.content}\n${fence}`);
-      } else {
-        sectionBlocks.push(`## ${section.title}\n\n${section.content}`);
-      }
-    } else if (section.status === 'unavailable') {
-      const reason = section.unavailableReason || 'not available';
-      sectionBlocks.push(`## ${section.title}\n\n_Unavailable: ${reason}_`);
+export function renderReport(pack: CrashPack, template = 'default'): string {
+  switch (template) {
+    case 'default':
+      return renderDefault(pack);
+    case 'minimal':
+      return renderMinimal(pack);
+    case 'envinfo':
+      return renderEnvinfo(pack);
+    default: {
+      const err = new Error(`Unknown template "${template}". Available: default, envinfo, minimal.`);
+      (err as any).exitCode = 2;
+      throw err;
     }
   }
+}
 
-  const footer = `\n---\n_Generated locally by crashpack · Built by Poorvith. Redaction can miss secrets; review before sharing._\n`;
-
-  return [header, ...sectionBlocks].join('\n\n') + footer;
+export function renderMarkdown(pack: CrashPack): string {
+  return renderReport(pack, 'default');
 }

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Crashpack for Maintainers | Issue templates &amp; configuration</title>
+  <meta name="description" content="Add Crashpack to your issue templates, configure repo-shipped diagnostics, and use the official GitHub Action.">
+  <meta name="theme-color" content="#0d1117">
+  <link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://crashpack.poorvithmp.com/for-maintainers">
+  <link rel="stylesheet" href="/style.css"><script type="module" src="/assets/site.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header"><div class="container nav-row">
+  <a class="brand" href="/" aria-label="Crashpack home"><img src="/assets/logo.svg" width="34" height="34" alt="">crashpack<span class="version">v{{VERSION}}</span></a>
+  <button class="menu-toggle" aria-expanded="false" aria-controls="navigation" hidden>Menu</button>
+  <nav id="navigation" aria-label="Main"><a href="/#workflow">How it works</a><a href="/#builder">Build a command</a><a href="/guide">Docs</a><a href="/for-maintainers" aria-current="page">Maintainers</a><a href="/#about">About</a><a class="nav-source" href="https://github.com/poorvith-mp/crashpack">GitHub ↗</a></nav>
+</div></header>
+<main id="main" class="container guide-layout">
+<nav class="guide-nav" aria-label="Maintainer guide sections">
+  <a href="#issue-template">Issue template</a>
+  <a href="#config">Repo configuration</a>
+  <a href="#redaction">Redaction guarantee</a>
+  <a href="#github-action">GitHub Action</a>
+</nav>
+<article class="guide-content">
+<p class="eyebrow">CRASHPACK / MAINTAINERS / v{{VERSION}}</p>
+<h1>Crashpack for Maintainers</h1>
+<p class="lead">Make contributor bug reports consistent, diagnosed, and safe to share in your GitHub issues.</p>
+
+<section id="issue-template">
+<h2>1. Copy-Paste Issue Template Snippet</h2>
+<p>Add this section to your <code>.github/ISSUE_TEMPLATE/bug_report.md</code>:</p>
+<pre><code>### Environment &amp; Diagnostics
+
+Run the following command in your terminal and paste the complete output below:
+
+```bash
+npx crashpack@{{VERSION}} --no-clipboard --stdout --template envinfo
+```
+
+> **Windows PowerShell:**
+> ```powershell
+> npx crashpack@{{VERSION}} --no-clipboard --stdout --template envinfo
+> ```</code></pre>
+</section>
+
+<section id="config">
+<h2>2. Repo-Shipped Configuration (<code>.crashpackrc.json</code>)</h2>
+<p>Commit a <code>.crashpackrc.json</code> file at the root of your repository. Crashpack walks up from the user's working directory to the git root and applies your configuration automatically.</p>
+
+<h3>Sample: Next.js / Full-Stack Web App</h3>
+<pre><code>{
+  "template": "envinfo",
+  "issueTitlePrefix": "[bug] ",
+  "sections": ["system", "runtimes", "packages", "logs", "git"],
+  "sourcemaps": true,
+  "heuristics": true,
+  "skip": ["docker", "ports"]
+}</code></pre>
+
+<h3>Sample: CLI / Node Library</h3>
+<pre><code>{
+  "template": "minimal",
+  "issueTitlePrefix": "[cli-bug] ",
+  "sections": ["system", "runtimes", "logs"],
+  "skip": ["docker", "ports", "env"]
+}</code></pre>
+</section>
+
+<section id="redaction">
+<h2>3. Redaction Guarantee</h2>
+<p>Crashpack runs 100% locally and offline during collection:</p>
+<ul>
+  <li><strong>Zero Outbound Telemetry:</strong> No network requests during collection or report generation.</li>
+  <li><strong>Sensitive Token Stripping:</strong> API keys, JWTs, bearer tokens, AWS credentials, private keys, database connection strings, and passwords are automatically redacted.</li>
+  <li><strong>Path Sanitization:</strong> User home directories are normalized to <code>~</code> or <code>&lt;home&gt;</code> tokens.</li>
+  <li><strong>Environment Safety:</strong> The <code>env</code> collector captures variable names only, never their values.</li>
+</ul>
+</section>
+
+<section id="github-action">
+<h2>4. GitHub Actions Integration</h2>
+<p>Capture diagnostic reports automatically on CI failures using the composite action:</p>
+<pre><code>- name: Collect Crashpack Diagnostics on Failure
+  if: failure()
+  uses: poorvith-mp/crashpack-action@v1
+  with:
+    template: envinfo</code></pre>
+</section>
+
+</article>
+</main>
+<footer class="site-footer"><div class="container footer-row">
+  <p>Crashpack is MIT licensed. Built by <a href="https://poorvithmp.com">Poorvith M P</a>.</p>
+</div></footer>
+</body>
+</html>

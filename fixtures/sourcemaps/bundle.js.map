@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["_src.js"],
+  "sourcesContent": ["export function calculate(x) {\n  if (x <= 0) {\n    throw new Error('invalid input');\n  }\n  return x * 2;\n}\n\nexport function main() {\n  calculate(0);\n}\n"],
+  "mappings": ";AAAO,SAAS,UAAU,GAAG;AAC3B,MAAI,KAAK,GAAG;AACV,UAAM,IAAI,MAAM,eAAe;AAAA,EACjC;AACA,SAAO,IAAI;AACb;AAEO,SAAS,OAAO;AACrB,YAAU,CAAC;AACb;",
+  "names": []
+}

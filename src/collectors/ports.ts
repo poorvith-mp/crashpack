@@ -1,4 +1,5 @@
 import * as net from 'node:net';
+import { execa } from 'execa';
 import { asRawText, Collector } from '../types.js';
 
 interface PortInfo {
@@ -6,7 +7,7 @@ interface PortInfo {
   label: string;
 }
 
-const COMMON_PORTS: PortInfo[] = [
+export const COMMON_PORTS: PortInfo[] = [
   { port: 3000, label: 'dev/node' },
   { port: 3001, label: 'dev' },
   { port: 4000, label: 'dev' },
@@ -21,6 +22,22 @@ const COMMON_PORTS: PortInfo[] = [
   { port: 27017, label: 'mongodb' },
   { port: 9200, label: 'elasticsearch' },
 ];
+
+export function parsePowerShellPorts(stdout: string): number[] {
+  const trimmed = stdout.trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((item) => (typeof item === 'number' ? item : item?.LocalPort))
+        .filter((p): p is number => typeof p === 'number');
+    }
+    if (typeof parsed === 'number') return [parsed];
+    if (parsed && typeof parsed.LocalPort === 'number') return [parsed.LocalPort];
+  } catch {}
+  return [];
+}
 
 function checkPort(port: number, timeoutMs = 250): Promise<boolean> {
   return new Promise((resolve) => {
@@ -62,6 +79,49 @@ function checkPort(port: number, timeoutMs = 250): Promise<boolean> {
 }
 
 export const collectPorts: Collector = async (_ctx) => {
+  if (process.platform === 'win32') {
+    try {
+      const res = await execa(
+        'powershell',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          'Get-NetTCPConnection -State Listen -ErrorAction Stop | Select-Object -Property LocalPort -Unique | ConvertTo-Json',
+        ],
+        { timeout: 3000 }
+      );
+
+      const listeningPorts = new Set(parsePowerShellPorts(res.stdout || ''));
+      const activePorts: { port: number; label: string }[] = [];
+      for (const { port, label } of COMMON_PORTS) {
+        if (listeningPorts.has(port)) {
+          activePorts.push({ port, label });
+        }
+      }
+
+      activePorts.sort((a, b) => a.port - b.port);
+
+      if (activePorts.length === 0) {
+        return {
+          id: 'ports',
+          title: 'Ports',
+          status: 'ok',
+          rawContent: asRawText('- No common dev ports listening'),
+        };
+      }
+
+      const lines = activePorts.map((p) => `- \`${p.port}\` — likely ${p.label}`);
+      return {
+        id: 'ports',
+        title: 'Ports',
+        status: 'ok',
+        rawContent: asRawText(lines.join('\n')),
+      };
+    } catch {
+      // If PowerShell fails or times out, fall through to socket probing fallback
+    }
+  }
   const activePorts: { port: number; label: string }[] = [];
 
   const checks = COMMON_PORTS.map(async ({ port, label }) => {

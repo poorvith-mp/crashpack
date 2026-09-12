@@ -2,32 +2,57 @@
 
 # Crashpack
 
-Collect the context around a crash into a Markdown report: logs, git state, system details, runtimes, packages, Docker, ports, and environment key names. Built by [Poorvith M P](https://github.com/poorvith-mp).
+Collect the context around a crash into a clean, diagnosed Markdown report: logs, git state, system details, runtimes, packages, Docker, ports, and environment key names. Built by [Poorvith M P](https://github.com/poorvith-mp).
 
-[Website](https://crashpack.poorvithmp.com) · [Full guide](https://crashpack.poorvithmp.com/guide) · [Sample report](docs/sample-report.md) · [Contributing](CONTRIBUTING.md)
+[Website](https://crashpack.poorvithmp.com) · [Maintainer Guide](docs/for-maintainers.md) · [Full guide](https://crashpack.poorvithmp.com/guide) · [Sample report](docs/sample-report.md) · [Contributing](CONTRIBUTING.md)
 
 ![Crashpack website preview](https://raw.githubusercontent.com/poorvith-mp/crashpack/main/docs/assets/site-preview.png)
 
 ## Start here
 
-Node.js 20 or newer is required. This source release is **0.3.0**. The commands below pin that version; [npm release history](https://www.npmjs.com/package/crashpack?activeTab=versions) records published versions separately from git tags.
+Node.js 20 or newer is required. This source release is **0.4.0**. The commands below pin that version; [npm release history](https://www.npmjs.com/package/crashpack?activeTab=versions) records published versions separately from git tags.
 
 ```sh
-npx crashpack@0.3.0 --no-clipboard --out crash-report.md
+npx crashpack@0.4.0 --no-clipboard --out crash-report.md
 ```
 
 Or install it once:
 
 ```sh
-npm install -g crashpack@0.3.0
+npm install -g crashpack@0.4.0
 crashpack --no-clipboard --out crash-report.md
 ```
 
 Installation and `npx` may download packages. Installed collection runs offline by default, with the network boundaries below. Read the saved report before sharing it. Clipboard copying is on by default; `--no-clipboard` keeps review deliberate. Default runs also save a temporary Markdown file outside the repository.
 
+## What the report diagnoses
+
+Crashpack v0.4.0 does not just dump context — it diagnoses:
+
+- **Version-Mismatch Heuristics**: Analyzes installed dependencies and detected runtimes against 26 upstream compatibility rules (Next.js vs React, Vite vs Node, Angular vs TypeScript, etc.) and places a **Likely Cause** block at the top of the report. Disable with `--no-heuristics`.
+- **Offline Sourcemap Resolution**: Automatically rewrites minified or bundled stack frames in captured logs to their original source files and lines (`src/app/page.tsx:42:7 [from bundle.js:1:48213]`). Never fetches over the network, protects against path traversal, and re-sanitizes resolved file paths. Disable with `--no-sourcemaps`.
+- **Windows 11 Native Correctness**: Correctly detects Windows 11 (build ≥ 22000), avoids deprecated `wmic`, and uses fast PowerShell `Get-NetTCPConnection` with strict 3-second timeouts.
+
+## For maintainers
+
+Maintainers can drop Crashpack into GitHub issue templates in place of `npx envinfo` for identical heading compatibility plus captured logs and diagnosis:
+
+```markdown
+### Environment & Diagnostics
+Run `npx crashpack@0.4 --no-clipboard --stdout --template envinfo` and paste output below.
+```
+
+See the complete [Maintainer Guide](docs/for-maintainers.md) for sample repository configs (`.crashpackrc.json`), redaction guarantees, and the official composite GitHub Action [`poorvith-mp/crashpack-action`](https://github.com/poorvith-mp/crashpack-action).
+
 ## Common workflows
 
 ```sh
+# Drop-in envinfo template output
+crashpack --template envinfo --stdout --no-clipboard
+
+# Minimal summary: System, Runtimes, and Logs only
+crashpack --template minimal --stdout --no-clipboard
+
 # Collect if a command exits unsuccessfully
 crashpack --wrap "npm test" --no-clipboard
 
@@ -50,26 +75,26 @@ crashpack --issue --create --no-clipboard --out crash-report.md
 
 ## Configuration
 
-Create `.crashpackrc.json` in the directory where you run the CLI:
+Commit a `.crashpackrc.json` at your repository root. Crashpack automatically discovers it from any subfolder by walking up to the git root:
 
 ```json
 {
-  "skip": ["docker"],
-  "lines": 200,
-  "clipboard": false,
-  "out": "crash-report.md"
+  "template": "envinfo",
+  "issueTitlePrefix": "[bug] ",
+  "sections": ["system", "runtimes", "packages", "logs", "git"],
+  "sourcemaps": true,
+  "heuristics": true,
+  "skip": ["docker", "ports"]
 }
 ```
 
-CLI flags override individual fields. The first existing configuration wins, without merging or parent-directory lookup: `.crashpackrc`, `.crashpackrc.json`, `.crashpackrc.toml`, legacy `crashpack.config.json`, then `package.json`'s `crashpack` field. Invalid configuration fails before collection with exit code 2. [Full flags, TOML, and custom redaction](https://crashpack.poorvithmp.com/guide#configuration).
+CLI flags override individual fields. The first existing configuration wins (nearest to current directory up to git root), without merging. Supported files: `.crashpackrc`, `.crashpackrc.json`, `.crashpackrc.toml`, legacy `crashpack.config.json`, then `package.json`'s `crashpack` field. [Full flags, TOML, and custom redaction](https://crashpack.poorvithmp.com/guide#configuration).
 
 ## Privacy and limits
 
 The environment collector reads supported `.env` files in memory and emits key names only. Values appearing in logs or diffs are handled by heuristic redaction. Unknown secrets, personal information, source code, paths, and project metadata can remain. A redaction count of zero doesn't establish that a report is safe.
 
 Ports are tested with loopback TCP connections. Docker CLI probes can contact a configured remote daemon. A wrapped command has its own network behavior. Opening an issue URL sends its contents to the destination; confirming `--create` uploads through `gh`. Clipboard history or sync can retain copied reports. There is no blanket guarantee that no data leaves the machine.
-
-Crashpack gathers context; it doesn't diagnose dependency conflicts, resolve source maps, restart daemons, or capture memory dumps. Heuristics [#21](https://github.com/poorvith-mp/crashpack/issues/21), source maps [#23](https://github.com/poorvith-mp/crashpack/issues/23), and daemon memory work [#24](https://github.com/poorvith-mp/crashpack/issues/24) remain separate open designs.
 
 See the [privacy guide](https://crashpack.poorvithmp.com/guide#privacy) and [security policy](SECURITY.md). Report credential leaks privately.
 

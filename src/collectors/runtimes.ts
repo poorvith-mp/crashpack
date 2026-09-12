@@ -90,6 +90,15 @@ const RUNTIME_CHECKS: RuntimeCheck[] = [
       return match ? match[1] : null;
     },
   },
+  {
+    name: 'npm',
+    command: 'npm',
+    args: ['--version'],
+    parseVersion: (out) => {
+      const match = out.trim().match(/^(\d+\.\d+\.\d+)/);
+      return match ? match[1] : null;
+    },
+  },
 ];
 
 export const collectRuntimes: Collector = async (ctx) => {
@@ -107,24 +116,31 @@ export const collectRuntimes: Collector = async (ctx) => {
     if (check.name === 'Node' && foundRuntimes['Node']) return;
     if (check.name.startsWith('Python') && foundRuntimes['Python']) return;
 
-    try {
-      const res = await execa(check.command, check.args, {
-        timeout,
-        reject: false,
-      });
+    const commandsToTry = process.platform === 'win32'
+      ? [check.command, `${check.command}.cmd`]
+      : [check.command];
 
-      const output = (res.stdout || res.stderr || '').trim();
-      if (res.exitCode === 0 && output) {
-        const ver = check.parseVersion(output);
-        if (ver) {
-          const key = check.name.startsWith('Python') ? 'Python' : check.name;
-          if (!foundRuntimes[key]) {
-            foundRuntimes[key] = ver;
+    for (const cmd of commandsToTry) {
+      try {
+        const res = await execa(cmd, check.args, {
+          timeout,
+          reject: false,
+        });
+
+        const output = (res.stdout || res.stderr || '').trim();
+        if (res.exitCode === 0 && output) {
+          const ver = check.parseVersion(output);
+          if (ver) {
+            const key = check.name.startsWith('Python') ? 'Python' : check.name;
+            if (!foundRuntimes[key]) {
+              foundRuntimes[key] = ver;
+            }
+            break;
           }
         }
+      } catch {
+        // Ignored - try next command
       }
-    } catch {
-      // Ignored - runtime not installed
     }
   });
 
@@ -138,6 +154,7 @@ export const collectRuntimes: Collector = async (ctx) => {
       title: 'Runtimes',
       status: 'unavailable',
       unavailableReason: 'no common runtimes detected',
+      data: foundRuntimes,
     };
   }
 
@@ -146,5 +163,6 @@ export const collectRuntimes: Collector = async (ctx) => {
     title: 'Runtimes',
     status: 'ok',
     rawContent: asRawText(lines.join('\n')),
+    data: foundRuntimes,
   };
 };

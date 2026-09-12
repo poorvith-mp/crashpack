@@ -16,10 +16,14 @@ import { collectDocker } from './collectors/docker.js';
 import { collectPorts } from './collectors/ports.js';
 import { collectEnv } from './collectors/env.js';
 import { renderMarkdown } from './render/markdown.js';
+import { resolveSourcemapsInLog } from './sourcemap/resolve.js';
+import { runHeuristics } from './heuristics/index.js';
 
 export * from './types.js';
 export * from './redact/redact.js';
 export * from './render/markdown.js';
+export * from './sourcemap/resolve.js';
+export * from './heuristics/index.js';
 
 export interface RunCollectorOptions {
   cwd?: string;
@@ -32,6 +36,8 @@ export interface RunCollectorOptions {
   skip?: string[];
   redactExtra?: RegExp[];
   entropy?: boolean;
+  sourcemaps?: boolean;
+  heuristics?: boolean;
   /** Hard ceiling on the whole pack. Default 5000ms. */
   deadlineMs?: number;
   /** Override the collector set. Used by tests to drive failure paths. */
@@ -98,6 +104,7 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
           status: 'ok',
           content: safeContent,
           durationMs: colDuration,
+          ...(res.data !== undefined ? { data: res.data } : {}),
         };
       } else {
         // MANDATORY: reasons carry raw command lines and paths, so they redact too
@@ -110,6 +117,7 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
           status: 'unavailable',
           unavailableReason: reason.text,
           durationMs: colDuration,
+          ...(res.data !== undefined ? { data: res.data } : {}),
         };
       }
 
@@ -161,6 +169,52 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
   // Preserve canonical display order
   const orderMap = new Map(ALL_COLLECTORS.map((c, i) => [c.id, i]));
   sectionResults.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+
+  // Post-process sourcemaps on logs section
+  if (options.sourcemaps !== false) {
+    const logsSection = sectionResults.find((s) => s.id === 'logs');
+    if (logsSection && logsSection.status === 'ok' && logsSection.content) {
+      const resolved = await resolveSourcemapsInLog(logsSection.content, cwd);
+      const { text: safeContent, count } = redact(resolved.text, options.redactExtra, { entropy: options.entropy });
+      totalRedactions += count;
+      logsSection.content = safeContent;
+    }
+  }
+
+  // Version-mismatch heuristics producing Likely Cause section
+  if (options.heuristics !== false) {
+    const runtimesSec = sectionResults.find((s) => s.id === 'runtimes');
+    const packagesSec = sectionResults.find((s) => s.id === 'packages');
+    const findings = runHeuristics({
+      packagesData: packagesSec?.data as Array<{ name: string; version: string }> | undefined,
+      runtimesData: runtimesSec?.data as Record<string, string> | undefined,
+      runtimesStatus: runtimesSec?.status,
+    });
+
+    if (findings.length > 0) {
+      const lines = findings.map((f) => {
+        let line = `- ${f.message}`;
+        if (f.fix) line += `\n  Fix: \`${f.fix}\``;
+        return line;
+      });
+      const { text: safeContent, count } = redact(lines.join('\n'), options.redactExtra, { entropy: options.entropy });
+      totalRedactions += count;
+
+      const likelyCauseSection: Section = {
+        id: 'likely-cause',
+        title: 'Likely Cause',
+        status: 'ok',
+        content: safeContent,
+        durationMs: 0,
+      };
+      sectionResults.unshift(likelyCauseSection);
+    }
+  }
+
+  // Invariant: Section.data is never present in rendered markdown or --json output
+  for (const s of sectionResults) {
+    delete s.data;
+  }
 
   const totalDuration = Date.now() - startTime;
   const now = new Date();

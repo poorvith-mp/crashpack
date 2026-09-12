@@ -26,7 +26,6 @@ export function asRawText(value: string): RawText {
   return value as RawText;
 }
 
-
 export type SectionStatus = 'ok' | 'unavailable';
 
 export interface Section {
@@ -36,6 +35,7 @@ export interface Section {
   content?: SafeText;         // markdown body, ALREADY REDACTED
   unavailableReason?: SafeText; // required when status === 'unavailable'; ALREADY REDACTED
   durationMs: number;
+  data?: unknown;             // structured data for analysis, never rendered raw
 }
 
 export interface CrashPack {
@@ -61,6 +61,7 @@ export interface CollectorResult {
   status: SectionStatus;
   rawContent?: RawText;
   unavailableReason?: string;
+  data?: unknown;
 }
 
 export type Collector = (ctx: CollectorContext) => Promise<CollectorResult>;
@@ -85,4 +86,7 @@ export interface CliOptions {
   skip?: string;
   redactExtra?: string[];
   entropy?: boolean;
+  template?: string;
+  sourcemaps?: boolean;
+  heuristics?: boolean;
 }

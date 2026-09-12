@@ -163,4 +163,10 @@ export const SECRET_PATTERNS: PatternRule[] = [
     regex: /(?<=(?:secret|key|token|auth|signature)["']?\s*[:=]\s*["']?)[a-fA-F0-9]{32,64}(?=["'\s,;]|$)/gi,
     replacement: '[redacted]',
   },
+  // Windows User profile directory paths
+  {
+    id: 'user-home-path',
+    regex: /[a-zA-Z]:[\\/]Users[\\/][a-zA-Z0-9_.-]+/gi,
+    replacement: '~',
+  },
 ];

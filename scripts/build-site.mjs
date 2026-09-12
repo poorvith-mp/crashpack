@@ -13,7 +13,7 @@ await rm(output, { recursive: true, force: true });
 const { version } = JSON.parse(await readFile('package.json', 'utf8'));
 await mkdir('site-dist/assets', { recursive: true });
 await build({ entry: ['docs/site.ts'], format: ['esm'], outDir: 'site-dist/assets', minify: true, config: false, splitting: false, target: 'es2022' });
-for (const file of ['index.html', 'guide.html', '404.html', 'style.css', '_headers', 'sample-report.md']) {
+for (const file of ['index.html', 'guide.html', 'for-maintainers.html', '404.html', 'style.css', '_headers', 'sample-report.md', 'for-maintainers.md']) {
   const content = await readFile(`docs/${file}`, 'utf8');
   await writeFile(`site-dist/${file}`, content.replaceAll('{{VERSION}}', version));
 }

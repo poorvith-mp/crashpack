@@ -1,0 +1,290 @@
+[
+  {
+    "pkg": "next",
+    "range": "^15.0.0",
+    "requires": {
+      "pkg": "react",
+      "range": "^19"
+    },
+    "severity": "likely",
+    "message": "Next.js 15 requires React ^19",
+    "fix": "npm install react@^19 react-dom@^19",
+    "source": "https://nextjs.org/docs/app/building-your-application/upgrading/version-15"
+  },
+  {
+    "pkg": "next",
+    "range": "^14.0.0",
+    "requires": {
+      "pkg": "react",
+      "range": "^18"
+    },
+    "severity": "likely",
+    "message": "Next.js 14 requires React ^18",
+    "fix": "npm install react@^18 react-dom@^18",
+    "source": "https://nextjs.org/docs/app/building-your-application/upgrading/version-14"
+  },
+  {
+    "pkg": "@angular/core",
+    "range": "^19.0.0",
+    "requires": {
+      "pkg": "typescript",
+      "range": ">=5.5.0 <5.7.0"
+    },
+    "severity": "likely",
+    "message": "@angular/core 19 requires typescript >=5.5.0 <5.7.0",
+    "source": "https://angular.dev/reference/versions"
+  },
+  {
+    "pkg": "@angular/core",
+    "range": "^18.0.0",
+    "requires": {
+      "pkg": "typescript",
+      "range": ">=5.4.0 <5.6.0"
+    },
+    "severity": "likely",
+    "message": "@angular/core 18 requires typescript >=5.4.0 <5.6.0",
+    "source": "https://angular.dev/reference/versions"
+  },
+  {
+    "pkg": "@angular/core",
+    "range": "^17.0.0",
+    "requires": {
+      "pkg": "typescript",
+      "range": ">=5.2.0 <5.4.0"
+    },
+    "severity": "likely",
+    "message": "@angular/core 17 requires typescript >=5.2.0 <5.4.0",
+    "source": "https://angular.dev/reference/versions"
+  },
+  {
+    "pkg": "vite",
+    "range": "^6.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=18.0.0"
+    },
+    "severity": "possible",
+    "message": "Vite 6 requires Node.js >=18",
+    "source": "https://vite.dev/guide/#scaffolding-your-first-vite-project"
+  },
+  {
+    "pkg": "vite",
+    "range": "^7.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=20.19.0"
+    },
+    "severity": "possible",
+    "message": "Vite 7 requires Node.js >=20.19",
+    "source": "https://vite.dev/guide/#environment-support"
+  },
+  {
+    "pkg": "vite",
+    "range": "^5.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=18.0.0"
+    },
+    "severity": "possible",
+    "message": "Vite 5 requires Node.js >=18",
+    "source": "https://v5.vite.dev/guide/#environment-support"
+  },
+  {
+    "pkg": "eslint",
+    "range": "^9.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": "^18.18.0 || ^20.9.0 || >=21.1.0"
+    },
+    "severity": "possible",
+    "message": "ESLint 9 requires Node.js ^18.18.0 || ^20.9.0 || >=21.1.0",
+    "source": "https://eslint.org/docs/latest/use/migrate-to-9.0.0"
+  },
+  {
+    "pkg": "react-native",
+    "range": "^0.76.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=18.0.0"
+    },
+    "severity": "possible",
+    "message": "React Native 0.76 requires Node.js >=18",
+    "source": "https://reactnative.dev/docs/environment-setup"
+  },
+  {
+    "pkg": "react-native",
+    "range": "^0.77.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=18.0.0"
+    },
+    "severity": "possible",
+    "message": "React Native 0.77 requires Node.js >=18",
+    "source": "https://reactnative.dev/docs/environment-setup"
+  },
+  {
+    "pkg": "prisma",
+    "range": "^6.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=18.18.0"
+    },
+    "severity": "possible",
+    "message": "Prisma 6 requires Node.js >=18.18.0",
+    "source": "https://www.prisma.io/docs/orm/more/upgrade-guides/upgrading-versions/upgrading-to-prisma-6"
+  },
+  {
+    "pkg": "prisma",
+    "range": "^5.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=16.13.0"
+    },
+    "severity": "possible",
+    "message": "Prisma 5 requires Node.js >=16.13.0",
+    "source": "https://www.prisma.io/docs/orm/more/upgrade-guides/upgrading-versions/upgrading-to-prisma-5"
+  },
+  {
+    "pkg": "tailwindcss",
+    "range": "^4.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=20.0.0"
+    },
+    "severity": "possible",
+    "message": "Tailwind CSS v4 requires Node.js >=20",
+    "source": "https://tailwindcss.com/docs/upgrade-guide"
+  },
+  {
+    "pkg": "astro",
+    "range": "^5.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=18.17.1"
+    },
+    "severity": "possible",
+    "message": "Astro 5 requires Node.js >=18.17.1",
+    "source": "https://docs.astro.build/en/guides/upgrade-to/v5/"
+  },
+  {
+    "pkg": "astro",
+    "range": "^4.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=18.14.1"
+    },
+    "severity": "possible",
+    "message": "Astro 4 requires Node.js >=18.14.1",
+    "source": "https://docs.astro.build/en/guides/upgrade-to/v4/"
+  },
+  {
+    "pkg": "svelte",
+    "range": "^5.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=18.0.0"
+    },
+    "severity": "possible",
+    "message": "Svelte 5 requires Node.js >=18",
+    "source": "https://svelte.dev/docs/svelte/v5-migration-guide"
+  },
+  {
+    "pkg": "nuxt",
+    "range": "^3.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=18.0.0"
+    },
+    "severity": "possible",
+    "message": "Nuxt 3 requires Node.js >=18",
+    "source": "https://nuxt.com/docs/getting-started/installation"
+  },
+  {
+    "pkg": "webpack",
+    "range": "^5.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=10.13.0"
+    },
+    "severity": "possible",
+    "message": "Webpack 5 requires Node.js >=10.13.0",
+    "source": "https://webpack.js.org/migrate/5/"
+  },
+  {
+    "pkg": "typescript",
+    "range": "^5.0.0",
+    "requires": {
+      "pkg": "@types/node",
+      "range": ">=18.0.0"
+    },
+    "severity": "possible",
+    "message": "TypeScript 5 projects typically require @types/node >=18",
+    "source": "https://devblogs.microsoft.com/typescript/announcing-typescript-5-0/"
+  },
+  {
+    "pkg": "remix",
+    "range": "^2.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=18.0.0"
+    },
+    "severity": "possible",
+    "message": "Remix 2 requires Node.js >=18",
+    "source": "https://remix.run/docs/en/main/start/quickstart"
+  },
+  {
+    "pkg": "@tanstack/react-query",
+    "range": "^5.0.0",
+    "requires": {
+      "pkg": "react",
+      "range": ">=18.0.0"
+    },
+    "severity": "likely",
+    "message": "@tanstack/react-query 5 requires React >=18",
+    "source": "https://tanstack.com/query/v5/docs/react/installation"
+  },
+  {
+    "pkg": "vue",
+    "range": "^3.0.0",
+    "requires": {
+      "pkg": "typescript",
+      "range": ">=4.5.0"
+    },
+    "severity": "possible",
+    "message": "Vue 3 projects using TypeScript require typescript >=4.5",
+    "source": "https://vuejs.org/guide/typescript/overview.html"
+  },
+  {
+    "pkg": "vitest",
+    "range": "^3.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=18.0.0"
+    },
+    "severity": "possible",
+    "message": "Vitest 3 requires Node.js >=18",
+    "source": "https://vitest.dev/guide/"
+  },
+  {
+    "pkg": "vitest",
+    "range": "^2.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=18.0.0"
+    },
+    "severity": "possible",
+    "message": "Vitest 2 requires Node.js >=18",
+    "source": "https://v2.vitest.dev/guide/"
+  },
+  {
+    "pkg": "storybook",
+    "range": "^8.0.0",
+    "requires": {
+      "pkg": "node",
+      "range": ">=18.0.0"
+    },
+    "severity": "possible",
+    "message": "Storybook 8 requires Node.js >=18",
+    "source": "https://storybook.js.org/docs/get-started/install"
+  }
+]

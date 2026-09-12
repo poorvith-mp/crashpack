@@ -7,7 +7,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { createCrashPack, ALL_COLLECTORS } from './index.js';
-import { renderMarkdown } from './render/markdown.js';
+import { renderMarkdown, renderReport } from './render/markdown.js';
 import { loadConfig } from './config.js';
 
 interface CliArgs {
@@ -25,6 +25,9 @@ interface CliArgs {
   skip?: string;
   redactExtra?: string[];
   entropy?: boolean;
+  template?: string;
+  sourcemaps?: boolean;
+  heuristics?: boolean;
 }
 
 /**
@@ -117,22 +120,31 @@ export function issueBodyFor(markdown: string, savedPath?: string): { body: stri
   };
 }
 
-export function extractIssueUrl(remoteUrl?: string, projectName?: string, body?: string): { platform: 'GitHub' | 'GitLab'; url: string } | null {
+export function extractIssueUrl(
+  remoteUrl?: string,
+  projectName?: string,
+  body?: string,
+  issueTitlePrefix?: string
+): { platform: 'GitHub' | 'GitLab'; url: string } | null {
   if (!remoteUrl) return null;
   const ghMatch = remoteUrl.match(/^(?:https:\/\/github\.com\/|github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/);
   if (ghMatch && ghMatch[1] && ghMatch[2]) {
     const repo = `${ghMatch[1]}/${ghMatch[2]}`;
+    const defaultTitle = `[Bug]: Crash in ${projectName || 'repo'}`;
+    const title = issueTitlePrefix ? `${issueTitlePrefix}Crash in ${projectName || 'repo'}` : defaultTitle;
     return {
       platform: 'GitHub',
-      url: `https://github.com/${repo}/issues/new?title=${encodeURIComponent(`[Bug]: Crash in ${projectName || 'repo'}`)}&body=${encodeURIComponent(body || '')}`,
+      url: `https://github.com/${repo}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body || '')}`,
     };
   }
   const glMatch = remoteUrl.match(/^(?:https:\/\/gitlab\.com\/|gitlab\.com\/|git@gitlab\.com:|ssh:\/\/git@gitlab\.com\/)([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/);
   if (glMatch && glMatch[1] && glMatch[2]) {
     const repo = `${glMatch[1]}/${glMatch[2]}`;
+    const defaultTitle = `[Bug]: Crash in ${projectName || 'repo'}`;
+    const title = issueTitlePrefix ? `${issueTitlePrefix}Crash in ${projectName || 'repo'}` : defaultTitle;
     return {
       platform: 'GitLab',
-      url: `https://gitlab.com/${repo}/-/issues/new?issue[title]=${encodeURIComponent(`[Bug]: Crash in ${projectName || 'repo'}`)}&issue[description]=${encodeURIComponent(body || '')}`,
+      url: `https://gitlab.com/${repo}/-/issues/new?issue[title]=${encodeURIComponent(title)}&issue[description]=${encodeURIComponent(body || '')}`,
     };
   }
   return null;
@@ -152,6 +164,7 @@ export async function runCli(argv = process.argv): Promise<number> {
     .option('--json', 'Emit the raw CrashPack JSON object')
     .option('--clipboard', 'Copy report to clipboard (overrides config)')
     .option('--no-clipboard', 'Skip copying to clipboard')
+    .option('--template <name>', 'Template to render (default, envinfo, minimal)')
     // No commander default: absent must be distinguishable from an explicit
     // --lines 200, or config silently overrides the user's own flag (B-08).
     .option('--lines <n>', 'Number of log lines to capture (default 200)')
@@ -161,25 +174,73 @@ export async function runCli(argv = process.argv): Promise<number> {
     .option('--only <ids>', 'Comma-separated collector IDs to run')
     .option('--skip <ids>', 'Comma-separated collector IDs to skip')
     .option('--redact-extra <pattern...>', 'Additional regex pattern(s) to redact')
-    .option('--no-entropy', 'Disable the generic high-entropy token fallback');
+    .option('--no-entropy', 'Disable the generic high-entropy token fallback')
+    .option('--no-sourcemaps', 'Disable sourcemap stack trace resolution')
+    .option('--no-heuristics', 'Disable version-mismatch heuristics');
+
+  const helpGroups: Record<string, string[]> = {
+    Input: ['wrap', 'stdin'],
+    Output: ['out', 'stdout', 'json', 'clipboard', 'no-clipboard', 'template'],
+    Collection: ['only', 'skip', 'lines', 'since', 'redact-extra', 'no-entropy'],
+    Analysis: ['no-sourcemaps', 'no-heuristics'],
+    Issue: ['issue', 'create'],
+  };
+
+  program.configureHelp({
+    formatHelp: (cmd, helper) => {
+      let output = `${cmd.description()}\n\nUsage: ${helper.commandUsage(cmd)}\n\n`;
+      output += `Options:\n  -V, --version                  output the version number\n  -h, --help                     display help for command\n\n`;
+
+      const opts = cmd.options;
+      const getOpt = (name: string) =>
+        opts.find((o) => o.name() === name || o.attributeName() === name || o.long === `--${name}`);
+
+      for (const [groupName, optNames] of Object.entries(helpGroups)) {
+        output += `${groupName}:\n`;
+        for (const optName of optNames) {
+          const opt = getOpt(optName);
+          if (opt) {
+            const flags = opt.flags.padEnd(30);
+            output += `  ${flags} ${opt.description}\n`;
+          }
+        }
+        output += '\n';
+      }
+      return output.trimEnd() + '\n';
+    },
+  });
 
   program.parse(argv);
   const options = program.opts<CliArgs>();
 
   // Merge defaults from .crashpackrc if present
+  let fileConfig: ReturnType<typeof loadConfig> = null;
   try {
-    const fileConfig = loadConfig();
+    fileConfig = loadConfig();
     if (fileConfig) {
       if (options.only === undefined && fileConfig.only) options.only = fileConfig.only.join(',');
       if (options.skip === undefined && fileConfig.skip) options.skip = fileConfig.skip.join(',');
       options.redactExtra ??= fileConfig.redactExtra;
       options.out ??= fileConfig.out;
       if (program.getOptionValueSource('clipboard') !== 'cli') options.clipboard = fileConfig.clipboard;
+      options.template ??= fileConfig.template;
+      if (program.getOptionValueSource('sourcemaps') !== 'cli' && fileConfig.sourcemaps !== undefined) {
+        options.sourcemaps = fileConfig.sourcemaps;
+      }
+      if (program.getOptionValueSource('heuristics') !== 'cli' && fileConfig.heuristics !== undefined) {
+        options.heuristics = fileConfig.heuristics;
+      }
     }
     options.lines = String(resolveLines(options.lines, fileConfig?.lines));
     if (options.out !== undefined) {
       if (!options.out.trim()) throw new Error('--out must be a nonempty path');
       options.out = path.resolve(process.cwd(), options.out);
+    }
+    if (options.template !== undefined) {
+      const validTemplates = ['default', 'envinfo', 'minimal'];
+      if (!validTemplates.includes(options.template)) {
+        throw new Error(`Unknown template "${options.template}". Available: ${validTemplates.join(', ')}.`);
+      }
     }
     if (options.redactExtra?.some((pattern) => !parseRegexPattern(pattern))) throw new Error('--redact-extra: invalid pattern; check regex syntax and flags');
     if (options.create && !options.issue) throw new Error('--create requires --issue');
@@ -232,14 +293,16 @@ export async function runCli(argv = process.argv): Promise<number> {
 
       const result = await subprocess;
 
-      // If command exited successfully (code 0), produce nothing extra and pass exit 0
       if (result.exitCode === 0) {
         return 0;
       }
 
       // Non-zero exit -> proceed to collect pack
       const wrapBuffer = logBuffer.slice(-lineLimit).join('\n');
-      return await generateAndOutput({ ...options, lines: String(lineLimit) }, { wrapBuffer, exitCode: result.exitCode });
+      return await generateAndOutput(
+        { ...options, lines: String(lineLimit) },
+        { wrapBuffer, exitCode: result.exitCode, issueTitlePrefix: fileConfig?.issueTitlePrefix }
+      );
     } catch {
       process.stderr.write(`\n${pc.red('Error running wrapped command.')}\n`);
       return 1;
@@ -252,13 +315,14 @@ export async function runCli(argv = process.argv): Promise<number> {
     stdinLog = await readStdin();
   }
 
-  return await generateAndOutput(options, { stdinLog });
+  return await generateAndOutput(options, { stdinLog, issueTitlePrefix: fileConfig?.issueTitlePrefix });
 }
 
 interface ExtraContext {
   wrapBuffer?: string;
   stdinLog?: string;
   exitCode?: number;
+  issueTitlePrefix?: string;
 }
 
 async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise<number> {
@@ -295,6 +359,8 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     skip: skipList,
     redactExtra: extraPatterns,
     entropy: options.entropy,
+    sourcemaps: options.sourcemaps,
+    heuristics: options.heuristics,
   });
 
   if (!isSilentMode) {
@@ -313,7 +379,7 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     process.stderr.write(statusItems.join('\n') + '\n\n');
   }
 
-  const markdown = renderMarkdown(pack);
+  const markdown = renderReport(pack, options.template || 'default');
 
   // The issue URL goes to stderr on every output path, so --issue --stdout
   // and --issue --json still produce one (B-08.7).
@@ -323,7 +389,12 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     const gitSection = pack.sections.find((s) => s.id === 'git');
     const remoteMatch = (gitSection?.content || '').match(/Remote:\s*`([^`]+)`/);
     const { body, truncated } = issueBodyFor(markdown, savedPath);
-    const issueInfo = extractIssueUrl(remoteMatch ? remoteMatch[1] : undefined, pack.projectName, body);
+    const issueInfo = extractIssueUrl(
+      remoteMatch ? remoteMatch[1] : undefined,
+      pack.projectName,
+      body,
+      extra.issueTitlePrefix
+    );
 
     if (!issueInfo) {
       warn('--issue: no GitHub or GitLab remote detected');

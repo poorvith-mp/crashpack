@@ -145,6 +145,7 @@ export const collectPackages: Collector = async (ctx) => {
       title: 'Packages',
       status: 'unavailable',
       unavailableReason: 'no package manifests found',
+      data: packages,
     };
   }
 
@@ -168,5 +169,6 @@ export const collectPackages: Collector = async (ctx) => {
     title: 'Packages',
     status: 'ok',
     rawContent: asRawText(rows.join('\n')),
+    data: packages,
   };
 };
