@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { decodeVlq, decodeVlqSegment } from './vlq.js';
 
-describe('VLQ decoder (PMP-44)', () => {
+describe('VLQ decoder', () => {
   it('decodes AAAA to [0, 0, 0, 0]', () => {
     expect(decodeVlq('AAAA')).toEqual([0, 0, 0, 0]);
   });

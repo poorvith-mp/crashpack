@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { runHeuristics, Finding } from './index.js';
 import { CrashPack } from '../types.js';
 
-describe('Heuristics engine (PMP-42)', () => {
+describe('Heuristics engine', () => {
   it('detects Next.js 15.0.3 and React 18.3.1 mismatch with exact spec sentence', () => {
     const packagesData = [
       { name: 'next', version: '15.0.3' },

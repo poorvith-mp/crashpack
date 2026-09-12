@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { loadConfig } from './config.js';
 
-describe('Crashpack Config Loader (PMP-43)', () => {
+describe('Crashpack Config Loader', () => {
   let tempDir: string;
 
   beforeEach(() => {

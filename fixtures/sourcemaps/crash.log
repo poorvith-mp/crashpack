@@ -1,0 +1,4 @@
+Error: invalid input
+    at calculate (fixtures/sourcemaps/bundle.js:4:11)
+    at main (fixtures/sourcemaps/bundle.js:9:3)
+    at Object.<anonymous> (fixtures/sourcemaps/inline.js:9:3)

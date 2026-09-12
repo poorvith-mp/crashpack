@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { runCli } from './cli.js';
 
-describe('CLI flags & help groups (PMP-42, PMP-44, v0.4.0)', () => {
+describe('CLI flags & help groups (v0.4.0)', () => {
   let stdoutData = '';
   let stderrData = '';
 

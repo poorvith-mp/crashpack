@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import { resolveSourcemapsInLog } from './resolve.js';
 import { redact } from '../redact/redact.js';
 
-describe('Sourcemap resolver (PMP-44)', () => {
+describe('Sourcemap resolver', () => {
   const cwd = path.resolve('.');
 
   afterEach(() => {
@@ -101,7 +101,7 @@ describe('Sourcemap resolver (PMP-44)', () => {
       const result = await resolveSourcemapsInLog(log, cwd);
       const redacted = redact(result.text);
       expect(redacted.text).not.toContain('C:\\Users\\alice');
-      expect(redacted.text).toContain('~\\project\\src\\index.ts');
+      expect(redacted.text.replace(/\\/g, '/')).toContain('~/project/src/index.ts');
     } finally {
       if (fs.existsSync(tmpJs)) fs.unlinkSync(tmpJs);
       if (fs.existsSync(tmpMap)) fs.unlinkSync(tmpMap);
