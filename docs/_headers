@@ -4,3 +4,20 @@
   X-Content-Type-Options: nosniff
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
   X-Frame-Options: DENY
+
+/
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+/guide
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+/guide.html
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+/for-maintainers
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+/for-maintainers.html
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+/404
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+/404.html
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
