@@ -488,6 +488,12 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
   printIssueUrl(outputPath);
   await createIssue();
 
+  if (!options.stdin && !options.create && (extra.exitCode ?? 0) === 0
+      && process.stdin.isTTY && process.stdout.isTTY && process.stderr.isTTY
+      && !process.env.CI && process.env.GITHUB_ACTIONS !== 'true') {
+    process.stderr.write('Sponsorship is optional. If Crashpack helped, sponsor my work: https://razorpay.me/@poorvithmp\n');
+  }
+
   return extra.exitCode ?? 0;
 }
 

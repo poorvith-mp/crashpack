@@ -98,6 +98,12 @@ Ports are tested with loopback TCP connections. Docker CLI probes can contact a 
 
 See the [privacy guide](https://crashpack.poorvithmp.com/guide#privacy) and [security policy](SECURITY.md). Report credential leaks privately.
 
+## Optional sponsorship
+
+Crashpack is free to use. You can [sponsor my work](https://razorpay.me/@poorvithmp) through the website's About section or footer. The hosted page opens only when you choose the link; there's no payment SDK, tracking, or payment requirement.
+
+After saving a report in a successful interactive run, the CLI prints one optional sponsorship link to stderr. It doesn't add promotion to reports or clipboard contents, open a browser, or wait for input. The message is suppressed for redirected streams, `--stdin`, `--stdout`, `--json`, CI, failed wrapped commands, file-write fallback, and `--create`. Library calls don't show it.
+
 ## From source
 
 ```sh
