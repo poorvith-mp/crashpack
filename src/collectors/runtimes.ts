@@ -123,10 +123,18 @@ export const collectRuntimes: Collector = async (ctx) => {
     const command = windows ? (process.env.ComSpec || process.env.COMSPEC || 'cmd.exe') : check.command;
     const args = windows ? ['/d', '/s', '/c', `${check.command} ${check.args.join(' ')}`] : check.args;
     try {
-      const res = await execa(command, args, {
+      const probe = execa(command, args, {
         timeout,
         reject: false,
       });
+      probe.once('exit', () => {
+        if (probe.killed) {
+          // A timed-out shell's child may still hold inherited output pipes.
+          probe.stdout?.destroy();
+          probe.stderr?.destroy();
+        }
+      });
+      const res = await probe;
 
       const output = (res.stdout || res.stderr || '').trim();
       if (res.exitCode === 0 && output) {

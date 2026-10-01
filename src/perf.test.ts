@@ -46,7 +46,7 @@ describe('Runtime budget (B-07)', () => {
     const pack = await createCrashPack({ cwd: process.cwd(), skip: ['docker'] });
 
     expect(Date.now() - started).toBeLessThan(6000);
-    expect(pack.sections.every((s) => s.unavailableReason !== 'exceeded global deadline')).toBe(true);
+    expect(pack.sections.filter((s) => s.unavailableReason === 'exceeded global deadline').map((s) => s.id)).toEqual([]);
   });
 
   it('degrades to unavailable rather than failing when the deadline fires', async () => {

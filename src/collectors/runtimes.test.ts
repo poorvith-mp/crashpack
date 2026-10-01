@@ -50,4 +50,18 @@ describe('runtime executable discovery', () => {
     expect(result.data).toEqual({ Node: process.version.slice(1) });
     expect(result.rawContent).toBe(`- Node \`${process.version.slice(1)}\``);
   });
+
+  it('does not wait for inherited output pipes after a version probe times out', async () => {
+    const cwd = fixture();
+    const child = path.join(cwd, 'slow-version.js');
+    fs.writeFileSync(child, "console.log('999.9.9'); setTimeout(() => {}, 3000);\n");
+    const windows = process.platform === 'win32';
+    fs.writeFileSync(path.join(cwd, 'npm' + (windows ? '.cmd' : '')), windows
+      ? `@echo off\r\n"${process.execPath}" "${child}"\r\n`
+      : `#!/bin/sh\n"${process.execPath}" "${child}"\n`, { mode: 0o755 });
+    const started = Date.now();
+    const result = await collectRuntimes({ cwd, timeoutMs: 200 });
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(result.data).toEqual({ Node: process.version.slice(1) });
+  });
 });
