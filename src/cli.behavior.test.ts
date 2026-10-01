@@ -1,4 +1,4 @@
-import { beforeEach, afterEach, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -20,6 +20,7 @@ let stdout: string;
 let stderr: string;
 const args = (...flags: string[]) => ['node', 'test', ...flags];
 const stdinTty = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+const stdoutTty = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
 const stderrTty = Object.getOwnPropertyDescriptor(process.stderr, 'isTTY');
 const pack = () => ({ projectName: 'demo', generatedAt: 'today', durationMs: 1, redactionCount: 0, sections: [{ id: 'git', title: 'Git', status: 'ok' as const, content: 'Remote: `https://github.com/example/demo.git`' as never, durationMs: 1 }] });
 
@@ -40,8 +41,11 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   if (stdinTty) Object.defineProperty(process.stdin, 'isTTY', stdinTty);
   else Reflect.deleteProperty(process.stdin, 'isTTY');
+  if (stdoutTty) Object.defineProperty(process.stdout, 'isTTY', stdoutTty);
+  else Reflect.deleteProperty(process.stdout, 'isTTY');
   if (stderrTty) Object.defineProperty(process.stderr, 'isTTY', stderrTty);
   else Reflect.deleteProperty(process.stderr, 'isTTY');
   fs.rmSync(dir, { recursive: true, force: true });
@@ -137,4 +141,64 @@ it('keeps a complete report on a gh creation failure without leaking tool stderr
   expect(stderr).toContain('Check the repository before retrying');
   expect(stderr).not.toContain('synthetic-private-error');
   expect(fs.readFileSync(path.join(dir, 'local.md'), 'utf8')).toContain('# crashpack');
+});
+
+describe('optional sponsorship after interactive report output', () => {
+  const sponsorUrl = 'https://razorpay.me/@poorvithmp';
+
+  beforeEach(() => {
+    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
+    vi.stubEnv('CI', '');
+    vi.stubEnv('GITHUB_ACTIONS', '');
+  });
+
+  it('shows one voluntary link on stderr after saving, never in the report', async () => {
+    expect(await runCli(args('--no-clipboard', '--out', 'local.md'))).toBe(0);
+    expect(stderr.split(sponsorUrl)).toHaveLength(2);
+    expect(stderr).toContain('optional');
+    expect(stderr.indexOf(sponsorUrl)).toBeGreaterThan(stderr.indexOf('REPORT SAVED'));
+    expect(stdout).not.toContain(sponsorUrl);
+    expect(fs.readFileSync(path.join(dir, 'local.md'), 'utf8')).not.toContain(sponsorUrl);
+  });
+
+  it.each(['stdin', 'stdout', 'stderr'] as const)('stays silent when %s is redirected', async (stream) => {
+    Object.defineProperty(process[stream], 'isTTY', { configurable: true, value: false });
+    expect(await runCli(args('--no-clipboard', '--out', 'local.md'))).toBe(0);
+    expect(stdout + stderr).not.toContain(sponsorUrl);
+  });
+
+  it.each(['--stdout', '--json', '--stdin'])('stays silent in %s mode even with terminal streams', async (flag) => {
+    expect(await runCli(args(flag, '--no-clipboard', '--out', 'local.md'))).toBe(0);
+    expect(stdout + stderr).not.toContain(sponsorUrl);
+    if (flag === '--json') expect(JSON.parse(stdout).projectName).toBe('demo');
+  });
+
+  it.each(['CI', 'GITHUB_ACTIONS'])('stays silent when %s identifies automation', async (name) => {
+    vi.stubEnv(name, 'true');
+    expect(await runCli(args('--no-clipboard', '--out', 'local.md'))).toBe(0);
+    expect(stdout + stderr).not.toContain(sponsorUrl);
+  });
+
+  it('stays silent when the requested report cannot be saved', async () => {
+    await runCli(args('--no-clipboard', '--out', 'missing/local.md'));
+    expect(stdout).toContain('# crashpack');
+    expect(stdout + stderr).not.toContain(sponsorUrl);
+  });
+
+  it('stays silent on validation failure', async () => {
+    expect(await runCli(args('--lines', '0'))).toBe(2);
+    expect(stdout + stderr).not.toContain(sponsorUrl);
+  });
+
+  it('keeps issue creation free of sponsorship even after confirmation', async () => {
+    await runCli(args('--issue', '--create', '--no-clipboard', '--out', 'local.md'));
+    expect(stdout + stderr).not.toContain(sponsorUrl);
+  });
+
+  it.each([0, 7])('stays silent for a wrapped command with exit %s', async (exitCode) => {
+    vi.mocked(execa).mockResolvedValueOnce({ exitCode } as never);
+    expect(await runCli(args('--wrap', 'synthetic-command', '--no-clipboard', '--out', 'local.md'))).toBe(exitCode);
+    expect(stdout + stderr).not.toContain(sponsorUrl);
+    if (exitCode !== 0) expect(fs.readFileSync(path.join(dir, 'local.md'), 'utf8')).toContain('# crashpack');
+  });
 });
