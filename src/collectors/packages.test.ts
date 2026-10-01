@@ -1,11 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { collectPackages } from './packages.js';
 
+const projects: string[] = [];
+afterEach(() => { for (const dir of projects.splice(0)) fs.rmSync(dir, { recursive: true, force: true }); });
+
 function tempProject(pkg: object, installed?: Record<string, string>): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crashpack-pkg-'));
+  projects.push(dir);
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(pkg), 'utf8');
 
   for (const [name, version] of Object.entries(installed ?? {})) {
@@ -44,5 +48,14 @@ describe('Resolved package versions (B-05)', () => {
 
     const res = await collectPackages({ cwd });
     expect(res.rawContent).toContain('22.15.1');
+  });
+
+  it('marks installed disk evidence separately from an uninstalled exact declaration', async () => {
+    const cwd = tempProject({ dependencies: { vite: '6.0.1', react: '^18.0.0' } }, { react: '18.3.1' });
+    const res = await collectPackages({ cwd });
+    expect(res.data).toEqual([
+      { name: 'vite', version: '6.0.1', versionSource: 'declared' },
+      { name: 'react', version: '18.3.1', versionSource: 'installed' },
+    ]);
   });
 });

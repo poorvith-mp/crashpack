@@ -1,7 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { createCrashPack } from './index.js';
 import { renderMarkdown } from './render/markdown.js';
 import { asRawText, Collector } from './types.js';
+import { resolveSourcemapsInLog } from './sourcemap/resolve.js';
+
+afterEach(() => vi.restoreAllMocks());
 
 const throwing = (message: string): Collector => async () => {
   throw new Error(message);
@@ -85,5 +91,48 @@ describe('unavailableReason redaction (B-01)', () => {
 
     expect(pack.sections).toHaveLength(2);
     expect(pack.sections.find((s) => s.id === 'system')?.status).toBe('ok');
+  });
+});
+
+describe('sourcemap report ordering and privacy', () => {
+  async function fixture(check: (cwd: string, log: string) => Promise<void>) {
+    const cwd = fs.mkdtempSync(path.join(os.homedir(), 'crashpack-map-test-'));
+    try {
+      fs.writeFileSync(path.join(cwd, 'bundle.js'), 'throw new Error("synthetic");');
+      fs.writeFileSync(path.join(cwd, 'bundle.js.map'), JSON.stringify({ version: 3, sources: ['src/main.ts'], mappings: 'AAAA' }));
+      await check(cwd, `Error: DB_PASSWORD=synthetic-private-value\n    at main (${path.join(cwd, 'bundle.js').replace(/\\/g, '/')}:1:1)`);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  }
+  it('resolves absolute home frames before final redaction, never exposing raw logs or evidence', async () => {
+    await fixture(async (cwd, log) => {
+      expect((await resolveSourcemapsInLog(log, cwd)).text).toContain('src/main.ts:1:1');
+      const pack = await createCrashPack({ cwd, only: ['logs'], stdinLog: log, entropy: false });
+      expect(pack.sections[0].content).toContain('src/main.ts:1:1');
+      const output = JSON.stringify(pack) + renderMarkdown(pack);
+      expect(output).not.toContain(cwd.replace(/\\/g, '/'));
+      expect(output).not.toContain('synthetic-private-value');
+      expect(output).not.toContain('versionSource');
+      expect(pack.sections.every(s => s.data === undefined)).toBe(true);
+      expect(pack.redactionCount).toBe(2);
+    });
+  });
+  it('keeps no-sourcemaps disabled while redacting the original log', async () => {
+    await fixture(async (cwd, log) => {
+      const pack = await createCrashPack({ cwd, only: ['logs'], stdinLog: log, sourcemaps: false });
+      expect(pack.sections[0].content).not.toContain('src/main.ts:1:1');
+      expect(pack.sections[0].content).not.toContain('synthetic-private-value');
+    });
+  });
+  it('uses only the remaining collection deadline for analysis', async () => {
+    await fixture(async (cwd, log) => {
+      let now = 0;
+      vi.spyOn(Date, 'now').mockImplementation(() => now);
+      const pack = await createCrashPack({ cwd, deadlineMs: 5, collectors: [{ id: 'logs', title: 'Logs', fn: async () => { now = 5; return { id: 'logs', title: 'Logs', status: 'ok', rawContent: asRawText(log) }; } }] });
+      expect(pack.sections[0].content).not.toContain('src/main.ts:1:1');
+      expect(pack.sections[0].content).toContain('(sourcemap resolution stopped: budget)');
+      expect(pack.sections[0].content).not.toContain('synthetic-private-value');
+    });
   });
 });

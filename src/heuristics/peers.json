@@ -1,16 +1,5 @@
 [
-  {
-    "pkg": "next",
-    "range": "^15.0.0",
-    "requires": {
-      "pkg": "react",
-      "range": "^19"
-    },
-    "severity": "likely",
-    "message": "Next.js 15 requires React ^19",
-    "fix": "npm install react@^19 react-dom@^19",
-    "source": "https://nextjs.org/docs/app/building-your-application/upgrading/version-15"
-  },
+
   {
     "pkg": "next",
     "range": "^14.0.0",
@@ -72,10 +61,10 @@
     "range": "^7.0.0",
     "requires": {
       "pkg": "node",
-      "range": ">=20.19.0"
+      "range": "^20.19.0 || >=22.12.0"
     },
     "severity": "possible",
-    "message": "Vite 7 requires Node.js >=20.19",
+    "message": "Vite 7 requires Node.js ^20.19.0 || >=22.12.0",
     "source": "https://vite.dev/guide/#environment-support"
   },
   {

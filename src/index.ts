@@ -38,7 +38,7 @@ export interface RunCollectorOptions {
   entropy?: boolean;
   sourcemaps?: boolean;
   heuristics?: boolean;
-  /** Hard ceiling on the whole pack. Default 5000ms. */
+  /** Collection deadline; analysis uses its remaining budget. Default 5000ms. */
   deadlineMs?: number;
   /** Override the collector set. Used by tests to drive failure paths. */
   collectors?: { id: string; title: string; fn: Collector }[];
@@ -83,6 +83,7 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
   };
 
   let totalRedactions = 0;
+  let rawLogContent: string | undefined;
 
   const collectorPromises = selected.map(async ({ id, title, fn }) => {
     const colStart = Date.now();
@@ -94,8 +95,10 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
 
       let section: Section;
       if (res.status === 'ok' && res.rawContent !== undefined) {
-        // MANDATORY: RawText MUST pass through redact() to become SafeText
-        const { text: safeContent, count } = redact(res.rawContent, options.redactExtra, { entropy: options.entropy });
+        // Retain raw logs locally for resolution, never in a public section.
+        const analyzeLogs = id === 'logs' && options.sourcemaps !== false;
+        if (analyzeLogs) rawLogContent = res.rawContent;
+        const { text: safeContent, count } = redact(analyzeLogs ? '' : res.rawContent, options.redactExtra, { entropy: options.entropy });
         totalRedactions += count;
 
         section = {
@@ -173,8 +176,9 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
   // Post-process sourcemaps on logs section
   if (options.sourcemaps !== false) {
     const logsSection = sectionResults.find((s) => s.id === 'logs');
-    if (logsSection && logsSection.status === 'ok' && logsSection.content) {
-      const resolved = await resolveSourcemapsInLog(logsSection.content, cwd);
+    if (logsSection && logsSection.status === 'ok' && rawLogContent !== undefined) {
+      const remainingMs = Math.max(0, deadlineMs - (Date.now() - startTime));
+      const resolved = await resolveSourcemapsInLog(rawLogContent, cwd, { budgetMs: Math.min(3000, remainingMs) });
       const { text: safeContent, count } = redact(resolved.text, options.redactExtra, { entropy: options.entropy });
       totalRedactions += count;
       logsSection.content = safeContent;

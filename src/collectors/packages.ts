@@ -6,6 +6,7 @@ import { asRawText, Collector } from '../types.js';
 interface PackageItem {
   name: string;
   version: string;
+  versionSource?: 'installed' | 'declared';
 }
 
 /**
@@ -15,16 +16,16 @@ interface PackageItem {
  * which they could read from the repo themselves. The one number worth having
  * in a bug report is what is actually on disk.
  */
-function resolveNodeVersion(cwd: string, name: string, declared: string): string {
+function resolveNodeVersion(cwd: string, name: string, declared: string): Pick<PackageItem, 'version' | 'versionSource'> {
   try {
     const manifest = path.join(cwd, 'node_modules', ...name.split('/'), 'package.json');
     const version = JSON.parse(fs.readFileSync(manifest, 'utf8')).version;
-    if (typeof version === 'string' && version) return version;
+    if (typeof version === 'string' && version) return { version, versionSource: 'installed' };
   } catch {
     // Not installed — fall through to the declared range.
   }
   // Rendered as written ('^15.0.3'), so a range never masquerades as exact.
-  return declared;
+  return { version: declared, versionSource: 'declared' };
 }
 
 export const collectPackages: Collector = async (ctx) => {
@@ -39,7 +40,7 @@ export const collectPackages: Collector = async (ctx) => {
       const json = JSON.parse(content);
       const deps = { ...json.dependencies, ...json.devDependencies };
       for (const [name, ver] of Object.entries(deps)) {
-        packages.push({ name, version: resolveNodeVersion(cwd, name, String(ver)) });
+        packages.push({ name, ...resolveNodeVersion(cwd, name, String(ver)) });
       }
     } catch {
       // Ignored
@@ -169,6 +170,6 @@ export const collectPackages: Collector = async (ctx) => {
     title: 'Packages',
     status: 'ok',
     rawContent: asRawText(rows.join('\n')),
-    data: packages,
+    data: packages.map((p) => ({ ...p, versionSource: p.versionSource ?? 'declared' })),
   };
 };

@@ -112,4 +112,16 @@ describe('renderReport templates', () => {
       expect(err.exitCode).toBe(2);
     }
   });
+
+  test('envinfo includes redacted findings after fixed headings and before logs without changing minimal', () => {
+    const pack = makeMockPack();
+    pack.sections.unshift({ id: 'likely-cause', title: 'Likely Cause', status: 'ok', content: '- Vite needs a supported Node version; secret=[redacted]' as SafeText, durationMs: 0 });
+    const output = renderReport(pack, 'envinfo');
+    expect(output).toContain('## Likely Cause');
+    expect(output).toContain('secret=[redacted]');
+    expect(output.indexOf('npmPackages:')).toBeLessThan(output.indexOf('## Likely Cause'));
+    expect(output.indexOf('## Likely Cause')).toBeLessThan(output.indexOf('## Logs'));
+    expect(renderReport(pack, 'minimal')).not.toContain('Likely Cause');
+    expect(renderReport(makeMockPack(), 'envinfo')).not.toContain('Likely Cause');
+  });
 });
