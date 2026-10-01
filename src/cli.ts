@@ -1,7 +1,5 @@
 import { Command } from 'commander';
 import pc from 'picocolors';
-import clipboardy from 'clipboardy';
-import { execa } from 'execa';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -291,6 +289,7 @@ export async function runCli(argv = process.argv): Promise<number> {
 
     try {
       // Execute command through shell so piping/arguments work naturally
+      const { execa } = await import('execa');
       const subprocess = execa(options.wrap, {
         shell: true,
         reject: false,
@@ -313,7 +312,7 @@ export async function runCli(argv = process.argv): Promise<number> {
       const wrapBuffer = [...logBuffer.slice(nextLine), ...logBuffer.slice(0, nextLine)].join('\n');
       return await generateAndOutput(
         { ...options, lines: String(lineLimit) },
-        { wrapBuffer, exitCode: result.exitCode, issueTitlePrefix: fileConfig?.issueTitlePrefix }
+        { wrapBuffer, exitCode: result.exitCode, issueTitlePrefix: fileConfig?.issueTitlePrefix, sections: fileConfig?.sections }
       );
     } catch {
       process.stderr.write(`\n${pc.red('Error running wrapped command.')}\n`);
@@ -327,7 +326,7 @@ export async function runCli(argv = process.argv): Promise<number> {
     stdinLog = await readStdin();
   }
 
-  return await generateAndOutput(options, { stdinLog, issueTitlePrefix: fileConfig?.issueTitlePrefix });
+  return await generateAndOutput(options, { stdinLog, issueTitlePrefix: fileConfig?.issueTitlePrefix, sections: fileConfig?.sections });
 }
 
 interface ExtraContext {
@@ -335,6 +334,7 @@ interface ExtraContext {
   stdinLog?: string;
   exitCode?: number;
   issueTitlePrefix?: string;
+  sections?: string[];
 }
 
 async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise<number> {
@@ -391,7 +391,7 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     process.stderr.write(statusItems.join('\n') + '\n\n');
   }
 
-  const markdown = renderReport(pack, options.template || 'default');
+  const markdown = renderReport(pack, options.template || 'default', extra.sections);
 
   // The issue URL goes to stderr on every output path, so --issue --stdout
   // and --issue --json still produce one (B-08.7).
@@ -455,6 +455,7 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
   let copiedToClipboard = false;
   if (options.clipboard !== false) {
     try {
+      const { default: clipboardy } = await import('clipboardy');
       await clipboardy.write(markdown);
       copiedToClipboard = true;
     } catch {
@@ -535,6 +536,7 @@ async function createGithubIssue(markdown: string, gitContent: string | undefine
   }
   const repo = new URL(issue.url).pathname.split('/').slice(1, 3).join('/');
   const ghEnv = { GH_HOST: 'github.com', GH_PROMPT_DISABLED: '1' };
+  const { execa } = await import('execa');
   process.stderr.write(`\nReview the complete report before sharing; redaction can miss secrets.\n${markdown}\n`);
   try {
     await execa('gh', ['--version'], { shell: false, timeout: 10_000, env: ghEnv });

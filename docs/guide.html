@@ -26,7 +26,7 @@
 <p class="lead">Give a bug report enough context to be useful. Keep control of what you collect and where the report goes.</p>
 <section id="installation">
 <h2>Installation</h2>
-<p>Use Node.js 20 or newer. These instructions target source version <strong>{{VERSION}}</strong>. Source version and npm publication are separate: check the <a href="https://www.npmjs.com/package/crashpack">npm package</a> before using a newly tagged version.</p>
+<p>Use Node.js 20.5.0 or newer. These instructions target source version <strong>{{VERSION}}</strong>. Source version and npm publication are separate: check the <a href="https://www.npmjs.com/package/crashpack">npm package</a> before using a newly tagged version.</p>
 <pre><code id="install-command">npx crashpack@{{VERSION}} --no-clipboard --out crash-report.md</code></pre>
 <button data-copy="install-command">Copy command</button>
 <p>For repeated use, install the pinned release:</p>
@@ -35,6 +35,7 @@ crashpack --version
 crashpack --no-clipboard --out crash-report.md</code></pre>
 <p>Installation and <code>npx</code> may download packages. Installed collection runs offline by default, subject to the <a href="#privacy">network boundaries</a>. Reports are copied to the clipboard by default and saved locally. Start with <code>--no-clipboard</code> so you can review the saved file first.</p>
 <h3>Run from source</h3>
+<p>Building from source requires Node.js 22.12 or newer, or Node 20.x starting at 20.19. The development toolchain isn't needed to run the installed package.</p>
 <pre><code>git clone https://github.com/poorvith-mp/crashpack.git
 cd crashpack
 npm ci
@@ -194,7 +195,7 @@ const markdown = renderMarkdown(pack);
 </section>
 <section id="maintenance">
 <h2>Maintenance</h2>
-<p>From a clean checkout with Node.js 20 or newer:</p>
+<p>From a clean checkout with Node.js 22.12 or newer, or Node 20.x starting at 20.19:</p>
 <pre><code>npm ci
 npm run typecheck
 npm test

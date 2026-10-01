@@ -45,9 +45,9 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            runtime: 20.0.0
+            runtime: 20.5.0
           - os: windows-latest
-            runtime: 20.0.0
+            runtime: 20.5.0
           - os: macos-latest
             runtime: 22.x
     steps:
@@ -73,8 +73,8 @@ jobs:
           test "$(node "$ROOT/dist/cli.js" --version)" = "$(node -p "require('./$ROOT/package.json').version")"
           node "$ROOT/dist/cli.js" --help
           printf 'Synthetic runtime-floor log\n' | node "$ROOT/dist/cli.js" --stdin --json --no-clipboard --only logs > runtime-pack.json
-          node --input-type=module -e "import assert from 'node:assert/strict'; import { createCrashPack } from './.runtime-smoke/node_modules/crashpack/dist/index.js'; const pack=await createCrashPack({only:['logs'],stdinLog:'Synthetic ESM log'}); assert.equal(pack.sections[0].status,'ok');"
-          node -e "const assert=require('node:assert/strict'); const {createCrashPack}=require('./.runtime-smoke/node_modules/crashpack/dist/index.cjs'); createCrashPack({only:['logs'],stdinLog:'Synthetic CJS log'}).then(pack=>assert.equal(pack.sections[0].status,'ok')); const json=require('./runtime-pack.json'); assert.equal(json.sections[0].id,'logs'); assert.ok(!json.sections[0].data);"
+          node --input-type=module -e "import assert from 'node:assert/strict'; import { createCrashPack } from './.runtime-smoke/node_modules/crashpack/dist/index.js'; const pack=await createCrashPack({only:['logs','runtimes'],stdinLog:'Synthetic ESM log'}); assert.equal(pack.sections[0].status,'ok'); const runtimes=pack.sections.find(s=>s.id==='runtimes'); assert.equal(runtimes.status,'ok'); assert.ok(runtimes.content.includes(process.version.slice(1)));"
+          node -e "const assert=require('node:assert/strict'); const {createCrashPack}=require('./.runtime-smoke/node_modules/crashpack/dist/index.cjs'); createCrashPack({only:['logs','runtimes'],stdinLog:'Synthetic CJS log'}).then(pack=>{assert.equal(pack.sections[0].status,'ok'); const runtimes=pack.sections.find(s=>s.id==='runtimes'); assert.equal(runtimes.status,'ok'); assert.ok(runtimes.content.includes(process.version.slice(1)));}); const json=require('./runtime-pack.json'); assert.equal(json.sections[0].id,'logs'); assert.ok(!json.sections[0].data);"
 
   diagnostics-demo:
     runs-on: ubuntu-latest

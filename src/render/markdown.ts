@@ -2,8 +2,16 @@ import { CrashPack } from '../types.js';
 import { renderDefault } from './templates/default.js';
 import { renderMinimal } from './templates/minimal.js';
 import { renderEnvinfo } from './templates/envinfo.js';
+import { KNOWN_SECTIONS } from '../config.js';
 
-export function renderReport(pack: CrashPack, template = 'default'): string {
+export function renderReport(pack: CrashPack, template = 'default', sections?: string[]): string {
+  if (sections !== undefined) {
+    const ids = [...new Set(sections.map((id) => id.trim().toLowerCase()))];
+    if (ids.some((id) => !KNOWN_SECTIONS.has(id))) {
+      process.stderr.write('warning: unknown render section ID ignored\n');
+    }
+    pack = { ...pack, sections: ids.flatMap((id) => KNOWN_SECTIONS.has(id) ? pack.sections.filter((s) => s.id === id) : []) };
+  }
   switch (template) {
     case 'default':
       return renderDefault(pack);

@@ -135,6 +135,16 @@ it('honors no-clipboard and replaces configured skip/redaction fields', async ()
   expect(createCrashPack).toHaveBeenCalledWith(expect.objectContaining({ skip: ['system'], redactExtra: [/explicit/g] }));
 });
 
+it('applies configured render sections without filtering collection or JSON', async () => {
+  vi.mocked(loadConfig).mockReturnValue({ sections: [] });
+  await runCli(args('--stdout'));
+  expect(stdout).not.toContain('## Git');
+  expect(createCrashPack).toHaveBeenCalledWith(expect.objectContaining({ only: undefined, skip: undefined }));
+  stdout = '';
+  await runCli(args('--json'));
+  expect(JSON.parse(stdout).sections).toHaveLength(1);
+});
+
 it('keeps a complete report on a gh creation failure without leaking tool stderr', async () => {
   vi.mocked(execa).mockResolvedValueOnce({ exitCode: 0 } as never).mockResolvedValueOnce({ exitCode: 0 } as never).mockRejectedValueOnce(new Error('synthetic-private-error'));
   await runCli(args('--issue', '--create', '--out', 'local.md'));

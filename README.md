@@ -10,7 +10,7 @@ Collect the context around a crash into a clean, diagnosed Markdown report: logs
 
 ## Start here
 
-Node.js 20 or newer is required. This source release is **0.4.1**. The commands below pin that version; [npm release history](https://www.npmjs.com/package/crashpack?activeTab=versions) records published versions separately from git tags.
+Node.js 20.5.0 or newer is required. This source release is **0.4.1**. The commands below pin that version; [npm release history](https://www.npmjs.com/package/crashpack?activeTab=versions) records published versions separately from git tags.
 
 ```sh
 npx crashpack@0.4.1 --no-clipboard --out crash-report.md

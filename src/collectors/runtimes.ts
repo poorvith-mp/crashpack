@@ -1,4 +1,4 @@
-import { execa } from 'execa';
+
 import { asRawText, Collector } from '../types.js';
 
 interface RuntimeCheck {
@@ -111,36 +111,35 @@ export const collectRuntimes: Collector = async (ctx) => {
   }
 
   // Probe other runtimes in parallel
+  const { execa } = await import('execa');
   const probes = RUNTIME_CHECKS.map(async (check) => {
     // Skip if already found (e.g. Node or Python3 vs Python)
     if (check.name === 'Node' && foundRuntimes['Node']) return;
     if (check.name.startsWith('Python') && foundRuntimes['Python']) return;
 
-    const commandsToTry = process.platform === 'win32'
-      ? [check.command, `${check.command}.cmd`]
-      : [check.command];
+    // Fixed probe commands only: native cmd lookup handles PATHEXT without
+    // cross-spawn's synchronous PATH scans or redundant .cmd retries.
+    const windows = process.platform === 'win32';
+    const command = windows ? (process.env.ComSpec || process.env.COMSPEC || 'cmd.exe') : check.command;
+    const args = windows ? ['/d', '/s', '/c', `${check.command} ${check.args.join(' ')}`] : check.args;
+    try {
+      const res = await execa(command, args, {
+        timeout,
+        reject: false,
+      });
 
-    for (const cmd of commandsToTry) {
-      try {
-        const res = await execa(cmd, check.args, {
-          timeout,
-          reject: false,
-        });
-
-        const output = (res.stdout || res.stderr || '').trim();
-        if (res.exitCode === 0 && output) {
-          const ver = check.parseVersion(output);
-          if (ver) {
-            const key = check.name.startsWith('Python') ? 'Python' : check.name;
-            if (!foundRuntimes[key]) {
-              foundRuntimes[key] = ver;
-            }
-            break;
+      const output = (res.stdout || res.stderr || '').trim();
+      if (res.exitCode === 0 && output) {
+        const ver = check.parseVersion(output);
+        if (ver) {
+          const key = check.name.startsWith('Python') ? 'Python' : check.name;
+          if (!foundRuntimes[key]) {
+            foundRuntimes[key] = ver;
           }
         }
-      } catch {
-        // Ignored - try next command
       }
+    } catch {
+      // Optional runtime unavailable or its probe timed out.
     }
   });
 

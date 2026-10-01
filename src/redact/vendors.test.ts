@@ -75,9 +75,9 @@ describe('No-redact corpus (D-2 safety net)', () => {
     'utf8'
   );
 
-  it('leaves every benign high-entropy string untouched', () => {
+  it('leaves benign high-entropy strings untouched while masking the home prefix', () => {
     const res = redact(corpus);
-    expect(res.text).toBe(corpus);
-    expect(res.count).toBe(0);
+    expect(res.text).toBe(corpus.replace('/home/user/', '~/'));
+    expect(res.count).toBe(1);
   });
 });

@@ -4,7 +4,7 @@ Start with a concrete failure, a small reproduction, and the behavior you expect
 
 ## Local setup
 
-Use Node.js 20 or newer and Git.
+Use Node.js 22.12 or newer (or Node 20.x starting at 20.19) and Git for development. The installed CLI/library supports Node.js 20.5.0 or newer; the development toolchain has stricter requirements.
 
 ```sh
 git clone https://github.com/poorvith-mp/crashpack.git

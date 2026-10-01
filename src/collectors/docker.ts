@@ -1,4 +1,4 @@
-import { execa } from 'execa';
+
 import { asRawText, Collector } from '../types.js';
 
 const MAX_CONTAINERS = 15;
@@ -7,6 +7,7 @@ export const collectDocker: Collector = async (ctx) => {
   const timeout = ctx.timeoutMs ?? 2000;
 
   try {
+    const { execa } = await import('execa');
     // Check if docker CLI is installed and daemon is responsive
     const infoRes = await execa('docker', ['info', '--format', '{{.ServerVersion}}'], {
       timeout,
