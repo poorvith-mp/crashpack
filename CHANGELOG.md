@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.1 — 2026-10-01
+
+### Added
+
+- Optional hosted sponsorship links in the website's About section and footers.
+- One optional stderr notice after a successful interactive CLI report save. It stays out of machine-output modes, redirected streams, CI, failed wrapped commands, issue creation, reports, clipboard contents, and library calls. No payment SDK, browser auto-open, or delay was added.
+
+### Fixed
+
+- HTML-only `no-transform` headers keep injected analytics and WebMCP scripts out of the deployed website while leaving JS and CSS compressible.
+- The CI diagnostics demo tolerates only its deliberately failing step, asserts the expected outcome, and keeps real collection failures fatal.
+- Package and lockfile release versions are synchronized at 0.4.1.
+
 ## 0.4.0
 
 ### Added
