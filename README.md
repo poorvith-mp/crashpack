@@ -10,16 +10,16 @@ Collect the context around a crash into a clean, diagnosed Markdown report: logs
 
 ## Start here
 
-Node.js 20 or newer is required. This source release is **0.4.0**. The commands below pin that version; [npm release history](https://www.npmjs.com/package/crashpack?activeTab=versions) records published versions separately from git tags.
+Node.js 20 or newer is required. This source release is **0.4.1**. The commands below pin that version; [npm release history](https://www.npmjs.com/package/crashpack?activeTab=versions) records published versions separately from git tags.
 
 ```sh
-npx crashpack@0.4.0 --no-clipboard --out crash-report.md
+npx crashpack@0.4.1 --no-clipboard --out crash-report.md
 ```
 
 Or install it once:
 
 ```sh
-npm install -g crashpack@0.4.0
+npm install -g crashpack@0.4.1
 crashpack --no-clipboard --out crash-report.md
 ```
 
@@ -27,7 +27,7 @@ Installation and `npx` may download packages. Installed collection runs offline 
 
 ## What the report diagnoses
 
-Crashpack v0.4.0 does not just dump context — it diagnoses:
+Crashpack v0.4.1 does not just dump context — it diagnoses:
 
 - **Version-Mismatch Heuristics**: Analyzes installed dependencies and detected runtimes against 26 upstream compatibility rules (Next.js vs React, Vite vs Node, Angular vs TypeScript, etc.) and places a **Likely Cause** block at the top of the report. Disable with `--no-heuristics`.
 - **Offline Sourcemap Resolution**: Automatically rewrites minified or bundled stack frames in captured logs to their original source files and lines (`src/app/page.tsx:42:7 [from bundle.js:1:48213]`). Never fetches over the network, protects against path traversal, and re-sanitizes resolved file paths. Disable with `--no-sourcemaps`.
