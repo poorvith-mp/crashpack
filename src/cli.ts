@@ -6,6 +6,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { createInterface } from 'node:readline/promises';
+import { StringDecoder } from 'node:string_decoder';
 import { createCrashPack, ALL_COLLECTORS } from './index.js';
 import { renderMarkdown, renderReport } from './render/markdown.js';
 import { loadConfig } from './config.js';
@@ -264,19 +265,28 @@ export async function runCli(argv = process.argv): Promise<number> {
   if (options.wrap) {
     const lineLimit = resolveLines(options.lines);
     const logBuffer: string[] = [];
-
-    const handleChunk = (chunk: Buffer | string) => {
-      const str = chunk.toString();
-      // Stream live to user's terminal
-      process.stderr.write(str);
-      // Keep in circular buffer
-      const newLines = str.split(/\r?\n/);
-      for (const line of newLines) {
-        logBuffer.push(line);
-        if (logBuffer.length > lineLimit * 2) {
-          logBuffer.splice(0, logBuffer.length - lineLimit);
-        }
+    const decoder = new StringDecoder('utf8');
+    let pending = '';
+    let nextLine = 0;
+    const finishLine = () => {
+      logBuffer[nextLine] = pending.charCodeAt(pending.length - 1) === 13 ? pending.slice(0, -1) : pending;
+      nextLine = (nextLine + 1) % lineLimit;
+      pending = '';
+    };
+    const capture = (text: string) => {
+      let start = 0;
+      for (let end = text.indexOf('\n'); end !== -1; end = text.indexOf('\n', start)) {
+        // One extra character lets the existing log sanitizer mark truncation.
+        pending += text.slice(start, Math.min(end, start + 2001 - pending.length));
+        finishLine();
+        start = end + 1;
       }
+      pending += text.slice(start, start + 2001 - pending.length);
+    };
+    const handleChunk = (chunk: Buffer | string) => {
+      // Keep live output byte-for-byte unchanged; decode only the captured copy.
+      process.stderr.write(chunk);
+      capture(decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
     };
 
     try {
@@ -292,13 +302,15 @@ export async function runCli(argv = process.argv): Promise<number> {
       }
 
       const result = await subprocess;
+      capture(decoder.end());
+      if (pending) finishLine();
 
       if (result.exitCode === 0) {
         return 0;
       }
 
       // Non-zero exit -> proceed to collect pack
-      const wrapBuffer = logBuffer.slice(-lineLimit).join('\n');
+      const wrapBuffer = [...logBuffer.slice(nextLine), ...logBuffer.slice(0, nextLine)].join('\n');
       return await generateAndOutput(
         { ...options, lines: String(lineLimit) },
         { wrapBuffer, exitCode: result.exitCode, issueTitlePrefix: fileConfig?.issueTitlePrefix }
