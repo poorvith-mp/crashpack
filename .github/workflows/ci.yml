@@ -38,7 +38,6 @@ jobs:
 
   diagnostics-demo:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
@@ -47,8 +46,10 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Deliberate failure step to demonstrate Crashpack report summary
+        id: failure_probe
+        continue-on-error: true
         run: exit 1
-      - name: Collect Crashpack Diagnostics on Failure
-        if: failure()
+      - name: Verify expected failure and collect Crashpack diagnostics
         run: |
+          test "${{ steps.failure_probe.outcome }}" = failure
           node dist/cli.js --no-clipboard --stdout --template envinfo --skip ports,docker >> "$GITHUB_STEP_SUMMARY"
