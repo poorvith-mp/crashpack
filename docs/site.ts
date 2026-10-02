@@ -64,13 +64,19 @@ if (form) {
     const lineInput = input<HTMLInputElement>('lines');
     const lines = Number(lineInput.value);
     const ids = [...form.querySelectorAll<HTMLInputElement>('input[name=collector]:checked')].map(el => el.value);
-    const wrapped = input<HTMLInputElement>('wrapped-command').value.trim();
+    const wrappedInput = input<HTMLInputElement>('wrapped-command');
+    const wrapped = wrappedInput.value.trim();
     const useClipboard = input<HTMLInputElement>('clipboard');
     input<HTMLElement>('wrap-field').hidden = mode !== 'wrap';
     useClipboard.disabled = output !== 'file';
+    const invalidLines = !lineInput.checkValidity() || !Number.isSafeInteger(lines) || lines < 1;
+    const invalidWrap = mode === 'wrap' && (!wrapped || /["\x27`$\r\n]/.test(wrapped));
+    lineInput.setAttribute('aria-invalid', String(invalidLines));
+    wrappedInput.setAttribute('aria-invalid', String(invalidWrap));
+    input<HTMLFieldSetElement>('collectors').setAttribute('aria-invalid', String(!ids.length));
     const error = !ids.length ? 'Choose at least one collector.'
-      : !lineInput.checkValidity() || !Number.isSafeInteger(lines) || lines < 1 ? 'Choose a whole number of lines from 1 to 100000.'
-      : mode === 'wrap' && (!wrapped || /["\x27`$\r\n]/.test(wrapped)) ? 'Use a simple command without quotes, dollar signs, backticks or line breaks. See the guide for shell-specific commands.' : '';
+      : invalidLines ? 'Choose a whole number of lines from 1 to 100000.'
+      : invalidWrap ? 'Use a simple command without quotes, dollar signs, backticks or line breaks. See the guide for shell-specific commands.' : '';
     form.querySelector<HTMLInputElement>('input[name=collector]')!.setCustomValidity(ids.length ? '' : 'Choose a collector.');
     document.querySelectorAll<HTMLButtonElement>('[data-copy="built-command"], [data-copy="built-config"]').forEach(button => button.disabled = Boolean(error));
     if (error) {

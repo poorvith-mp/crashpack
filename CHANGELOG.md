@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.2 — 2026-10-02
+
+### Fixed
+
+- Wrapped output capture retains logical UTF-8 lines across split writes, CRLF boundaries and unterminated tails without changing live stderr bytes.
+- Local source maps resolve raw frames before public redaction, respect the remaining analysis budget, and keep resolved home paths sanitized on Windows, Linux and macOS.
+- Compatibility findings require verified installed versions. Next.js 15 no longer triggers a blanket React 19 requirement; Vite 7's disjoint Node ranges are checked correctly. Envinfo reports retain diagnosis without changing their fixed heading order.
+- Markdown render-section selection is applied consistently without filtering collection or redacted JSON. Nonempty `$schema` metadata is accepted without fetching it.
+- Requested Markdown backups work in stdout and JSON modes. Save failures remain observable without corrupting machine output, duplicating ordinary writes, uploading issues or showing sponsorship. Explicit save failures return 1; failed wrapped commands keep their child exit code.
+- Builder validation is associated with its controls through an atomic polite status region and invalid states that clear on recovery. Real screen-reader testing was user-waived, not reported as passed.
+- Collector deadlines are installed before synchronous setup. Windows version probes avoid synchronous PATH scans, and timed-out probes release inherited output pipes.
+
+### Maintenance
+
+- Installed package minimum is Node 20.5.0. Development tooling requires Node `^20.19.0 || >=22.12.0`; exact-minimum installed-artifact checks remain separate.
+- Updated Vite to 7.3.6 and Vitest to 4.1.11, with a verified esbuild 0.28.1 override. No runtime dependency was added.
+- Expanded Linux/Windows CI to Node 20, 22 and 24, plus exact-minimum Linux/Windows and macOS installed-artifact checks.
+
 ## 0.4.1 — 2026-10-01
 
 ### Added

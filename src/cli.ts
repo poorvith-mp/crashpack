@@ -158,7 +158,7 @@ export async function runCli(argv = process.argv): Promise<number> {
     .version(VERSION)
     .option('--wrap <command>', 'Run a command, stream live, and capture crash context on non-zero exit')
     .option('--stdin', 'Read piped input as the log section')
-    .option('--out <path>', 'Write output to a specific file instead of temp')
+    .option('--out <path>', 'Save a Markdown backup, including stdout/JSON modes')
     .option('--stdout', 'Print the markdown report to stdout')
     .option('--json', 'Emit the raw CrashPack JSON object')
     .option('--clipboard', 'Copy report to clipboard (overrides config)')
@@ -418,37 +418,48 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     process.stderr.write(`  ${pc.bold(`🔗 ${issueInfo.platform} Issue URL:`)}\n  ${pc.underline(pc.cyan(issueInfo.url))}\n\n`);
   };
 
-  // Creation always keeps a local report, including machine-output modes.
-  let savedForCreate: string | undefined;
-  if (options.create) {
-    const destination = options.out ?? path.join(os.tmpdir(), `crashpack-${Date.now()}.md`);
+  // Save requested backups and issue bodies once, before output-mode returns.
+  let savedPath: string | undefined;
+  let saveFailed = false;
+  const destination = options.out ?? (options.create || !isSilentMode
+    ? path.join(os.tmpdir(), `crashpack-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.md`)
+    : undefined);
+  if (destination) {
     try {
       fs.writeFileSync(destination, markdown, { encoding: 'utf8', mode: 0o600 });
-      savedForCreate = destination;
+      savedPath = destination;
     } catch {
-      warn('Could not save report; issue creation skipped. Save the local output and create an issue manually.');
+      saveFailed = true;
+      warn('Could not save report. Keep the local output; issue creation is skipped.');
     }
   }
+  const exitCode = extra.exitCode || (saveFailed && options.out !== undefined ? 1 : 0);
 
   const createIssue = async () => {
-    if (!options.create || !savedForCreate) return;
-    await createGithubIssue(markdown, pack.sections.find((s) => s.id === 'git')?.content, savedForCreate, isSilentMode || Boolean(options.stdin));
+    if (!options.create || !savedPath) return;
+    await createGithubIssue(markdown, pack.sections.find((s) => s.id === 'git')?.content, savedPath, isSilentMode || Boolean(options.stdin));
   };
 
   // Handle JSON output
   if (options.json) {
     process.stdout.write(JSON.stringify(pack, null, 2) + '\n');
-    printIssueUrl();
+    printIssueUrl(savedPath);
     await createIssue();
-    return extra.exitCode ?? 0;
+    return exitCode;
   }
 
   // Handle stdout output
   if (options.stdout) {
     process.stdout.write(markdown + '\n');
-    printIssueUrl();
+    printIssueUrl(savedPath);
     await createIssue();
-    return extra.exitCode ?? 0;
+    return exitCode;
+  }
+
+  if (!savedPath) {
+    process.stdout.write(markdown + '\n');
+    printIssueUrl();
+    return exitCode;
   }
 
   // Handle clipboard copy (enabled by default unless --no-clipboard)
@@ -464,20 +475,6 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     }
   }
 
-  // Determine output file path
-  let outputPath = savedForCreate ?? options.out;
-  if (!outputPath) {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    outputPath = path.join(os.tmpdir(), `crashpack-${timestamp}.md`);
-  }
-
-  try {
-    if (!savedForCreate) fs.writeFileSync(outputPath, markdown, { encoding: 'utf8', mode: 0o600 });
-  } catch {
-    // If filesystem is read-only, fallback to stdout
-    process.stdout.write(markdown + '\n');
-    return extra.exitCode ?? 0;
-  }
 
   if (!isSilentMode) {
     const clipHeader = copiedToClipboard
@@ -492,13 +489,13 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     process.stderr.write(`${pc.cyan('│')}  ${clipHeader}\n`);
     process.stderr.write(`${pc.cyan('│')}\n`);
     process.stderr.write(`${pc.cyan('│')}  ${redactNote}\n`);
-    process.stderr.write(`${pc.cyan('│')}  ${pc.dim('📁 Backup file:')} ${pc.cyan(displayOutputPath(outputPath))}\n`);
+    process.stderr.write(`${pc.cyan('│')}  ${pc.dim('📁 Backup file:')} ${pc.cyan(displayOutputPath(savedPath))}\n`);
     process.stderr.write(`${pc.cyan('│')}  ${pc.dim('Redaction can miss secrets. Review the report before sharing.')}\n`);
     process.stderr.write(`${pc.cyan('╰──────────────────────────────────────────────────────────────────────────╯')}\n\n`);
 
   }
 
-  printIssueUrl(outputPath);
+  printIssueUrl(savedPath);
   await createIssue();
 
   if (!options.stdin && !options.create && (extra.exitCode ?? 0) === 0
@@ -507,7 +504,7 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
     process.stderr.write('Sponsorship is optional. If Crashpack helped, sponsor my work: https://razorpay.me/@poorvithmp\n');
   }
 
-  return extra.exitCode ?? 0;
+  return exitCode;
 }
 
 function displayOutputPath(outputPath: string): string {
@@ -557,8 +554,10 @@ async function createGithubIssue(markdown: string, gitContent: string | undefine
       warn(`Issue creation cancelled. ${recovery}`);
       return;
     }
-    // Restore the exact reviewed content in case the file changed during review.
-    fs.writeFileSync(savedPath, markdown, { encoding: 'utf8', mode: 0o600 });
+    // Restore only if review changed or removed the retained body.
+    if (!fs.existsSync(savedPath) || fs.readFileSync(savedPath, 'utf8') !== markdown) {
+      fs.writeFileSync(savedPath, markdown, { encoding: 'utf8', mode: 0o600 });
+    }
     await execa('gh', ['issue', 'create', '--repo', repo, '--title', title, '--body-file', savedPath], { shell: false, timeout: 30_000, env: ghEnv });
     process.stderr.write(`Issue created in https://github.com/${repo}/issues.\n`);
   } catch {
