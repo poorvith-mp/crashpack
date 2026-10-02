@@ -9,6 +9,7 @@ describe('Sourcemap resolver', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('resolves external and inline sourcemap frames from fixtures/sourcemaps', async () => {
@@ -106,5 +107,26 @@ describe('Sourcemap resolver', () => {
       if (fs.existsSync(tmpJs)) fs.unlinkSync(tmpJs);
       if (fs.existsSync(tmpMap)) fs.unlinkSync(tmpMap);
     }
+  });
+
+  it('does not resolve frames when the analysis budget is already exhausted', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const log = 'at calculate (fixtures/sourcemaps/bundle.js:4:11)';
+    const result = await resolveSourcemapsInLog(log, cwd, { budgetMs: 0 });
+    expect(result.resolvedCount).toBe(0);
+    expect(result.text).toContain(log);
+    expect(result.notes).toEqual(['(sourcemap resolution stopped: budget)']);
+  });
+
+  it('checks the elapsed budget during mapping parsing and leaves the frame intact', async () => {
+    let now = 0;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const parse = JSON.parse;
+    vi.spyOn(JSON, 'parse').mockImplementationOnce((text) => { const value = parse(text); now = 100; return value; });
+    const log = 'at calculate (fixtures/sourcemaps/bundle.js:4:11)';
+    const result = await resolveSourcemapsInLog(log, cwd, { budgetMs: 10 });
+    expect(result.resolvedCount).toBe(0);
+    expect(result.text).toContain(log);
+    expect(result.notes).toEqual(['(sourcemap resolution stopped: budget)']);
   });
 });

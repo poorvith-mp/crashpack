@@ -2,6 +2,26 @@ import { describe, it, expect } from 'vitest';
 import { redact } from './redact.js';
 import { asRawText } from '../types.js';
 
+describe('home-path privacy', () => {
+  it.each([
+    ['/home/synthetic-user/project/bundle.js:1:1', '~/project/bundle.js:1:1'],
+    ['/Users/synthetic-user/project/bundle.js:1:1', '~/project/bundle.js:1:1'],
+    ['/home/合成-user/project/bundle.js:1:1', '~/project/bundle.js:1:1'],
+    ['/root/project/bundle.js:1:1', '~/project/bundle.js:1:1'],
+    ['C:/Users/synthetic-user/project/bundle.js:1:1', '~/project/bundle.js:1:1'],
+  ])('masks the home prefix but preserves the source location in %s', (input, expected) => {
+    const result = redact(asRawText(`at main (${input})`), undefined, { entropy: false });
+    expect(result.text).toBe(`at main (${expected})`);
+    expect(result.count).toBe(1);
+    expect(redact(result.text, undefined, { entropy: false }).count).toBe(0);
+  });
+
+  it('does not rewrite relative source names or non-home absolute paths', () => {
+    const input = 'src/home/example.ts:1:1 /opt/project/main.ts:2:3 /rooted/main.ts:4:5 https://example.test/home/sample';
+    expect(redact(input, undefined, { entropy: false }).text).toBe(input);
+  });
+});
+
 describe('Redaction Core (TDD & Adversarial Corpus)', () => {
   describe('Standard secret pattern detection', () => {
     it('redacts AWS access keys', () => {

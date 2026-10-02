@@ -1,5 +1,4 @@
 import * as net from 'node:net';
-import { execa } from 'execa';
 import { asRawText, Collector } from '../types.js';
 
 interface PortInfo {
@@ -81,6 +80,7 @@ function checkPort(port: number, timeoutMs = 250): Promise<boolean> {
 export const collectPorts: Collector = async (_ctx) => {
   if (process.platform === 'win32') {
     try {
+      const { execa } = await import('execa');
       const res = await execa(
         'powershell',
         [

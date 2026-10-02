@@ -38,7 +38,7 @@ export interface RunCollectorOptions {
   entropy?: boolean;
   sourcemaps?: boolean;
   heuristics?: boolean;
-  /** Hard ceiling on the whole pack. Default 5000ms. */
+  /** Collection deadline; analysis uses its remaining budget. Default 5000ms. */
   deadlineMs?: number;
   /** Override the collector set. Used by tests to drive failure paths. */
   collectors?: { id: string; title: string; fn: Collector }[];
@@ -83,9 +83,13 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
   };
 
   let totalRedactions = 0;
+  let rawLogContent: string | undefined;
+  const deadlineMs = options.deadlineMs ?? 5000;
 
   const collectorPromises = selected.map(async ({ id, title, fn }) => {
     const colStart = Date.now();
+    // Install the deadline races before collectors can do synchronous setup.
+    await Promise.resolve();
     options.onCollectorStart?.(id);
 
     try {
@@ -94,8 +98,10 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
 
       let section: Section;
       if (res.status === 'ok' && res.rawContent !== undefined) {
-        // MANDATORY: RawText MUST pass through redact() to become SafeText
-        const { text: safeContent, count } = redact(res.rawContent, options.redactExtra, { entropy: options.entropy });
+        // Retain raw logs locally for resolution, never in a public section.
+        const analyzeLogs = id === 'logs' && options.sourcemaps !== false;
+        if (analyzeLogs) rawLogContent = res.rawContent;
+        const { text: safeContent, count } = redact(analyzeLogs ? '' : res.rawContent, options.redactExtra, { entropy: options.entropy });
         totalRedactions += count;
 
         section = {
@@ -144,13 +150,13 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
   // Backstop: a pathological collector degrades to unavailable rather than
   // holding the whole run open (B-07). Preserves the rule that one collector
   // can never fail the pack.
-  const deadlineMs = options.deadlineMs ?? 5000;
   const sectionResults = await Promise.all(
-    collectorPromises.map((promise, i) =>
-      Promise.race([
+    collectorPromises.map((promise, i) => {
+      let timer: ReturnType<typeof setTimeout>;
+      return Promise.race([
         promise,
         new Promise<Section>((resolve) => {
-          const timer = setTimeout(() => {
+          timer = setTimeout(() => {
             const { id, title } = selected[i];
             resolve({
               id,
@@ -159,11 +165,11 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
               unavailableReason: redact('exceeded global deadline').text,
               durationMs: deadlineMs,
             });
-          }, deadlineMs);
+          }, Math.max(0, deadlineMs - (Date.now() - startTime)));
           timer.unref?.();
         }),
-      ])
-    )
+      ]).finally(() => clearTimeout(timer));
+    })
   );
 
   // Preserve canonical display order
@@ -173,8 +179,9 @@ export async function createCrashPack(options: RunCollectorOptions = {}): Promis
   // Post-process sourcemaps on logs section
   if (options.sourcemaps !== false) {
     const logsSection = sectionResults.find((s) => s.id === 'logs');
-    if (logsSection && logsSection.status === 'ok' && logsSection.content) {
-      const resolved = await resolveSourcemapsInLog(logsSection.content, cwd);
+    if (logsSection && logsSection.status === 'ok' && rawLogContent !== undefined) {
+      const remainingMs = Math.max(0, deadlineMs - (Date.now() - startTime));
+      const resolved = await resolveSourcemapsInLog(rawLogContent, cwd, { budgetMs: Math.min(3000, remainingMs) });
       const { text: safeContent, count } = redact(resolved.text, options.redactExtra, { entropy: options.entropy });
       totalRedactions += count;
       logsSection.content = safeContent;

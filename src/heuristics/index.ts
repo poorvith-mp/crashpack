@@ -9,7 +9,7 @@ export interface Finding {
 }
 
 export interface HeuristicContext {
-  packagesData?: Array<{ name: string; version: string }>;
+  packagesData?: Array<{ name: string; version: string; versionSource?: 'installed' | 'declared' }>;
   runtimesData?: Record<string, string>;
   runtimesStatus?: 'ok' | 'unavailable';
 }
@@ -37,6 +37,8 @@ function formatName(name: string): string {
   return name;
 }
 
+const STABLE_VERSION = /^v?\d+\.\d+\.\d+$/;
+
 export function runHeuristics(ctx: HeuristicContext): Finding[] {
   const findings: Finding[] = [];
   const rules = peersData as PeerRule[];
@@ -44,6 +46,7 @@ export function runHeuristics(ctx: HeuristicContext): Finding[] {
   const packages = ctx.packagesData || [];
   const packageMap = new Map<string, string>();
   for (const p of packages) {
+    if (p.versionSource === 'declared' || !STABLE_VERSION.test(p.version.trim())) continue;
     packageMap.set(p.name.toLowerCase(), p.version);
   }
 
@@ -63,6 +66,7 @@ export function runHeuristics(ctx: HeuristicContext): Finding[] {
         continue;
       }
       const nodeVer = ctx.runtimesData.Node.replace(/^[=^~v]/, '').trim();
+      if (!STABLE_VERSION.test(nodeVer)) continue;
       if (!satisfies(nodeVer, rule.requires.range)) {
         const msg = `${formatName(rule.pkg)} ${installedVer} requires ${formatName(rule.requires.pkg)} ${rule.requires.range}; found ${nodeVer}.`;
         findings.push({

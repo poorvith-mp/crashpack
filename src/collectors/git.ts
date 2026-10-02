@@ -1,4 +1,4 @@
-import { execa } from 'execa';
+
 import { asRawText, Collector } from '../types.js';
 import { fenceFor } from '../render/fence.js';
 
@@ -7,6 +7,7 @@ export const collectGit: Collector = async (ctx) => {
   const cwd = ctx.cwd;
 
   try {
+    const { execa } = await import('execa');
     // Check if inside git work tree
     const isRepo = await execa('git', ['rev-parse', '--is-inside-work-tree'], {
       cwd,

@@ -10,16 +10,16 @@ Collect the context around a crash into a clean, diagnosed Markdown report: logs
 
 ## Start here
 
-Node.js 20 or newer is required. This source release is **0.4.1**. The commands below pin that version; [npm release history](https://www.npmjs.com/package/crashpack?activeTab=versions) records published versions separately from git tags.
+Node.js 20.5.0 or newer is required. This source release is **0.4.2**. The commands below pin that version; [npm release history](https://www.npmjs.com/package/crashpack?activeTab=versions) records published versions separately from git tags.
 
 ```sh
-npx crashpack@0.4.1 --no-clipboard --out crash-report.md
+npx crashpack@0.4.2 --no-clipboard --out crash-report.md
 ```
 
 Or install it once:
 
 ```sh
-npm install -g crashpack@0.4.1
+npm install -g crashpack@0.4.2
 crashpack --no-clipboard --out crash-report.md
 ```
 
@@ -27,9 +27,9 @@ Installation and `npx` may download packages. Installed collection runs offline 
 
 ## What the report diagnoses
 
-Crashpack v0.4.1 does not just dump context — it diagnoses:
+Crashpack v0.4.2 does not just dump context — it diagnoses:
 
-- **Version-Mismatch Heuristics**: Analyzes installed dependencies and detected runtimes against 26 upstream compatibility rules (Next.js vs React, Vite vs Node, Angular vs TypeScript, etc.) and places a **Likely Cause** block at the top of the report. Disable with `--no-heuristics`.
+- **Version-Mismatch Heuristics**: Checks verified installed dependencies and detected runtimes against upstream compatibility rules (Vite vs Node, Angular vs TypeScript, etc.) and places a **Likely Cause** block at the top of the report. Declared versions alone aren't mismatch evidence. Disable with `--no-heuristics`.
 - **Offline Sourcemap Resolution**: Automatically rewrites minified or bundled stack frames in captured logs to their original source files and lines (`src/app/page.tsx:42:7 [from bundle.js:1:48213]`). Never fetches over the network, protects against path traversal, and re-sanitizes resolved file paths. Disable with `--no-sourcemaps`.
 - **Windows 11 Native Correctness**: Correctly detects Windows 11 (build ≥ 22000), avoids deprecated `wmic`, and uses fast PowerShell `Get-NetTCPConnection` with strict 3-second timeouts.
 
@@ -39,10 +39,10 @@ Maintainers can drop Crashpack into GitHub issue templates in place of `npx envi
 
 ```markdown
 ### Environment & Diagnostics
-Run `npx crashpack@0.4 --no-clipboard --stdout --template envinfo` and paste output below.
+Run `npx crashpack@0.4.2 --no-clipboard --stdout --template envinfo` and paste output below.
 ```
 
-See the complete [Maintainer Guide](docs/for-maintainers.md) for sample repository configs (`.crashpackrc.json`), redaction guarantees, and the official composite GitHub Action [`poorvith-mp/crashpack-action`](https://github.com/poorvith-mp/crashpack-action).
+See the complete [Maintainer Guide](docs/for-maintainers.md) for sample repository configs (`.crashpackrc.json`), privacy boundaries, and the official composite GitHub Action [`poorvith-mp/crashpack-action`](https://github.com/poorvith-mp/crashpack-action).
 
 ## Common workflows
 
@@ -62,6 +62,9 @@ npm test 2>&1 | crashpack --stdin --no-clipboard
 # JSON section text has passed through redaction
 crashpack --json
 
+# Keep JSON stdout and also save a Markdown backup
+crashpack --json --out crash-report.md
+
 # Print a prefilled URL without opening it or uploading
 crashpack --issue --no-clipboard
 
@@ -70,6 +73,8 @@ crashpack --issue --create --no-clipboard --out crash-report.md
 ```
 
 `--wrap` runs through a shell and streams the child's output live, **unredacted**, to stderr. It waits for the child to exit; a successful child produces no report. Default collection can't recover past terminal logs: use `--stdin` or `--wrap`.
+
+`--out` saves Markdown even with `--stdout` or `--json`, without changing those stdout formats or enabling clipboard copying. It replaces an existing destination. A requested save failure warns on stderr and returns 1, while preserving a failed wrapped child's exit code. An implicit temporary-save failure warns and falls back to Markdown stdout without changing an otherwise successful exit.
 
 `--issue --create` requires GitHub CLI authentication and an interactive terminal. It saves a local report, displays the full report, and requires an explicit `yes` before uploading. It never uploads with `--stdin`, `--stdout`, `--json`, or noninteractive input. GitLab supports URL mode only. See [recovery and limits](https://crashpack.poorvithmp.com/guide#workflows).
 
@@ -90,6 +95,8 @@ Commit a `.crashpackrc.json` at your repository root. Crashpack automatically di
 
 CLI flags override individual fields. The first existing configuration wins (nearest to current directory up to git root), without merging. Supported files: `.crashpackrc`, `.crashpackrc.json`, `.crashpackrc.toml`, legacy `crashpack.config.json`, then `package.json`'s `crashpack` field. [Full flags, TOML, and custom redaction](https://crashpack.poorvithmp.com/guide#configuration).
 
+`$schema` is optional nonempty metadata and isn't fetched. `sections` filters rendered Markdown, not collection or redacted JSON; use `only`/`skip` to control collection. Empty `sections` omits all sections; IDs are trimmed, case-insensitive and deduplicated. Unknown IDs are ignored with a warning. `likely-cause` selects diagnosis. Default/minimal follow the selected order; envinfo keeps its fixed headings.
+
 ## Privacy and limits
 
 The environment collector reads supported `.env` files in memory and emits key names only. Values appearing in logs or diffs are handled by heuristic redaction. Unknown secrets, personal information, source code, paths, and project metadata can remain. A redaction count of zero doesn't establish that a report is safe.
@@ -105,6 +112,8 @@ Crashpack is free to use. You can [sponsor my work](https://razorpay.me/@poorvit
 After saving a report in a successful interactive run, the CLI prints one optional sponsorship link to stderr. It doesn't add promotion to reports or clipboard contents, open a browser, or wait for input. The message is suppressed for redirected streams, `--stdin`, `--stdout`, `--json`, CI, failed wrapped commands, file-write fallback, and `--create`. Library calls don't show it.
 
 ## From source
+
+Development tooling requires Node `^20.19.0 || >=22.12.0`. The installed prebuilt package minimum remains Node 20.5.0.
 
 ```sh
 git clone https://github.com/poorvith-mp/crashpack.git

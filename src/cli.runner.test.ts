@@ -64,11 +64,12 @@ describe('runCli input validation (B-12)', () => {
 
 describe('runCli exit codes (R8.3)', () => {
   it('propagates a wrapped command failure', async () => {
-    expect(await runCli(argv('--wrap', 'exit 3', '--stdout'))).toBe(3);
+    // This checks the child exit contract, not optional runtime probe latency.
+    expect(await runCli(argv('--wrap', 'exit 3', '--stdout', '--only', 'logs'))).toBe(3);
   });
 
   it('returns 0 and produces no report when the wrapped command succeeds', async () => {
-    const code = await runCli(argv('--wrap', 'exit 0', '--stdout'));
+    const code = await runCli(argv('--wrap', 'exit 0', '--stdout', '--only', 'logs'));
 
     expect(code).toBe(0);
     expect(out.join('')).not.toContain('# crashpack ·');

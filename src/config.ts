@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 
 export interface CrashpackConfig {
+  $schema?: string;
   only?: string[];
   skip?: string[];
   redactExtra?: string[];
@@ -23,7 +24,7 @@ const CANDIDATES = [
   'crashpack.config.json',
 ];
 
-const KNOWN_SECTIONS = new Set([
+export const KNOWN_SECTIONS = new Set([
   'logs',
   'git',
   'system',
@@ -32,6 +33,7 @@ const KNOWN_SECTIONS = new Set([
   'docker',
   'ports',
   'env',
+  'likely-cause',
 ]);
 
 const VALID_TEMPLATES = new Set(['default', 'envinfo', 'minimal']);
@@ -55,6 +57,7 @@ function validate(value: unknown): CrashpackConfig {
         break;
       case 'out':
       case 'issueTitlePrefix':
+      case '$schema':
         if (typeof item !== 'string' || !item.trim()) throw new Error();
         break;
       case 'template':
@@ -63,8 +66,8 @@ function validate(value: unknown): CrashpackConfig {
       case 'sections':
         if (!Array.isArray(item) || !item.every((entry) => typeof entry === 'string')) throw new Error();
         for (const s of item) {
-          if (!KNOWN_SECTIONS.has(s.toLowerCase())) {
-            process.stderr.write(`warning: unknown section "${s}" in config\n`);
+          if (!KNOWN_SECTIONS.has(s.trim().toLowerCase())) {
+            process.stderr.write('warning: unknown render section ID ignored\n');
           }
         }
         break;

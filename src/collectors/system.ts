@@ -1,6 +1,5 @@
 import * as os from 'node:os';
 import * as fs from 'node:fs';
-import { execa } from 'execa';
 import { asRawText, Collector } from '../types.js';
 
 function formatBytes(bytes: number): string {
@@ -55,6 +54,7 @@ export const collectSystem: Collector = async (ctx) => {
     let edition: string | null = null;
     if (platform === 'win32') {
       try {
+        const { execa } = await import('execa');
         const res = await execa(
           'powershell',
           ['-NoProfile', '-NonInteractive', '-Command', '(Get-CimInstance Win32_OperatingSystem).Caption'],

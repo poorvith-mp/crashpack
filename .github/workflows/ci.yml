@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-        node-version: [20.x, 22.x]
+        node-version: [20.x, 22.x, 24.x]
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -23,6 +23,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit && npm audit --omit=dev
 
       - name: Typecheck
         run: npm run typecheck
@@ -35,6 +38,43 @@ jobs:
 
       - name: Build website and check script budget
         run: npm run build:site
+
+  packed-runtime:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            runtime: 20.5.0
+          - os: windows-latest
+            runtime: 20.5.0
+          - os: macos-latest
+            runtime: 22.x
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 22.x
+      - run: npm ci
+      - name: Pack and install production artifact
+        shell: bash
+        run: |
+          npm run build
+          npm pack --ignore-scripts --json > pack-result.json
+          ARCHIVE=$(node -p "require('./pack-result.json')[0].filename")
+          npm install --prefix .runtime-smoke --omit=dev --ignore-scripts --no-save "./$ARCHIVE"
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ matrix.runtime }}
+      - name: Smoke CLI and both library formats
+        shell: bash
+        run: |
+          ROOT=".runtime-smoke/node_modules/crashpack"
+          test "$(node "$ROOT/dist/cli.js" --version)" = "$(node -p "require('./$ROOT/package.json').version")"
+          node "$ROOT/dist/cli.js" --help
+          printf 'Synthetic runtime-floor log\n' | node "$ROOT/dist/cli.js" --stdin --json --no-clipboard --only logs > runtime-pack.json
+          node --input-type=module -e "import assert from 'node:assert/strict'; import { createCrashPack } from './.runtime-smoke/node_modules/crashpack/dist/index.js'; const pack=await createCrashPack({only:['logs','runtimes'],stdinLog:'Synthetic ESM log'}); assert.equal(pack.sections[0].status,'ok'); const runtimes=pack.sections.find(s=>s.id==='runtimes'); assert.equal(runtimes.status,'ok'); assert.ok(runtimes.content.includes(process.version.slice(1)));"
+          node -e "const assert=require('node:assert/strict'); const {createCrashPack}=require('./.runtime-smoke/node_modules/crashpack/dist/index.cjs'); createCrashPack({only:['logs','runtimes'],stdinLog:'Synthetic CJS log'}).then(pack=>{assert.equal(pack.sections[0].status,'ok'); const runtimes=pack.sections.find(s=>s.id==='runtimes'); assert.equal(runtimes.status,'ok'); assert.ok(runtimes.content.includes(process.version.slice(1)));}); const json=require('./runtime-pack.json'); assert.equal(json.sections[0].id,'logs'); assert.ok(!json.sections[0].data);"
 
   diagnostics-demo:
     runs-on: ubuntu-latest

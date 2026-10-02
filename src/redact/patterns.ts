@@ -169,4 +169,10 @@ export const SECRET_PATTERNS: PatternRule[] = [
     regex: /[a-zA-Z]:[\\/]Users[\\/][a-zA-Z0-9_.-]+/gi,
     replacement: '~',
   },
+  // Conventional Linux/macOS home prefixes; keep project-relative locations.
+  {
+    id: 'unix-home-path',
+    regex: /(?<![\w/])(?:\/(?:home|Users)\/[^/\s"'`()[\]:]+|\/root(?=$|[/\s"'`()[\]:]))/g,
+    replacement: '~',
+  },
 ];

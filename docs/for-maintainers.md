@@ -12,12 +12,12 @@ Add this section to your `.github/ISSUE_TEMPLATE/bug_report.md`:
 Run the following command in your terminal and paste the complete output below:
 
 ```bash
-npx crashpack@0.4 --no-clipboard --stdout --template envinfo
+npx crashpack@0.4.2 --no-clipboard --stdout --template envinfo
 ```
 
 > **Windows PowerShell:**
 > ```powershell
-> npx crashpack@0.4 --no-clipboard --stdout --template envinfo
+> npx crashpack@0.4.2 --no-clipboard --stdout --template envinfo
 > ```
 ```
 
@@ -33,7 +33,6 @@ You can commit a `.crashpackrc.json` file at the root of your repository. When a
 
 ```json
 {
-  "$schema": "https://crashpack.poorvithmp.com/schema.json",
   "template": "envinfo",
   "issueTitlePrefix": "[bug] ",
   "sections": ["system", "runtimes", "packages", "logs", "git"],
@@ -47,7 +46,6 @@ You can commit a `.crashpackrc.json` file at the root of your repository. When a
 
 ```json
 {
-  "$schema": "https://crashpack.poorvithmp.com/schema.json",
   "template": "minimal",
   "issueTitlePrefix": "[cli-bug] ",
   "sections": ["system", "runtimes", "logs"],
@@ -61,7 +59,8 @@ You can commit a `.crashpackrc.json` file at the root of your repository. When a
 |---|---|---|
 | `template` | `"default"` \| `"envinfo"` \| `"minimal"` | Report template format. |
 | `issueTitlePrefix` | `string` | Prefix prepended to issue titles when using `--issue`. |
-| `sections` | `string[]` | Ordered allowlist of collector IDs to render. |
+| `sections` | `string[]` | Render allowlist, including `likely-cause`. Default/minimal follow its order; envinfo keeps its fixed headings. It does not limit collection or JSON. |
+| `$schema` | `string` | Optional nonempty metadata. Crashpack never fetches this URL. |
 | `sourcemaps` | `boolean` | Resolve stack traces in logs using local source maps (default `true`). |
 | `heuristics` | `boolean` | Detect known package/runtime version mismatches (default `true`). |
 | `only` | `string[]` | Limit collection strictly to these collectors. |
@@ -73,12 +72,12 @@ You can commit a `.crashpackrc.json` file at the root of your repository. When a
 
 ---
 
-## 3. Redaction Guarantee
+## 3. Privacy Boundaries
 
-Crashpack runs 100% locally and offline during collection:
+Review the report before sharing; redaction reduces accidental disclosure but doesn't certify it as safe.
 
-- **Zero Outbound Telemetry**: No network requests are sent during collection or diagnosis. The only external network action is interactive GitHub issue creation via `--issue --create`, which requires explicit user consent.
-- **Sensitive Token Stripping**: API keys, JWTs, bearer tokens, AWS credentials, private keys, database connection strings, and passwords are automatically redacted.
+- **Network Boundaries**: Installed ordinary collection has no telemetry or automatic report upload. Ports use loopback TCP; Docker can contact a configured remote daemon. Wrapped commands have their own network behavior. Opening an issue URL or confirming `--issue --create` shares its contents externally.
+- **Sensitive Token Stripping**: Built-in and optional entropy patterns mask matching values. Unknown secrets, personal information, source code and metadata can remain; a zero redaction count isn't a safety guarantee.
 - **Path Sanitization**: User home directories (`/home/username` and `C:\Users\username`) are normalized to `~` or `<home>` tokens.
 - **Environment Safety**: The `env` collector captures only variable names (keys), never their values.
 

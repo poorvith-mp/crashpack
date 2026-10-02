@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -13,6 +13,8 @@ describe('Crashpack Config Loader', () => {
 
   afterEach(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('loads json config from .crashpackrc', () => {
@@ -78,5 +80,27 @@ describe('Crashpack Config Loader', () => {
     expect(() => loadConfig(tempDir)).toThrow('Invalid crashpack configuration');
     fs.writeFileSync(path.join(tempDir, 'package.json'), 'malformed private value');
     expect(() => loadConfig(tempDir)).toThrow('Invalid crashpack configuration');
+  });
+
+  it('accepts nonempty schema metadata without fetching it', () => {
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const config = { $schema: 'https://example.test/local-schema.json', only: ['logs'] };
+    fs.writeFileSync(path.join(tempDir, '.crashpackrc.json'), JSON.stringify(config));
+    expect(loadConfig(tempDir)).toEqual(config);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it.each([null, 1, {}, '', ' '])('rejects invalid schema metadata %j', ($schema) => {
+    fs.writeFileSync(path.join(tempDir, '.crashpackrc.json'), JSON.stringify({ $schema }));
+    expect(() => loadConfig(tempDir)).toThrow('Invalid crashpack configuration');
+  });
+  it('recognizes normalized likely-cause and warns generically for unknown render sections', () => {
+    let stderr = '';
+    vi.spyOn(process.stderr, 'write').mockImplementation(value => { stderr += String(value); return true; });
+    fs.writeFileSync(path.join(tempDir, '.crashpackrc.json'), JSON.stringify({ sections: [' Likely-Cause ', ' SYSTEM ', 'synthetic-private-section'] }));
+    expect(loadConfig(tempDir)?.sections).toHaveLength(3);
+    expect(stderr).toContain('unknown');
+    expect(stderr).not.toContain('synthetic-private-section');
+    expect(stderr).not.toContain('Likely-Cause');
   });
 });

@@ -49,13 +49,18 @@ export async function resolveSourcemapsInLog(
     }
   }
 
-  function getOrLoadMap(bundlePathRaw: string): ParsedMap | 'indexed' | 'skip' {
-    if (budgetExhausted) return 'skip';
-    if (Date.now() - startTime > budgetMs) {
+  function withinBudget(): boolean {
+    if (budgetExhausted) return false;
+    if (Date.now() - startTime >= budgetMs) {
       budgetExhausted = true;
       addNote('(sourcemap resolution stopped: budget)');
-      return 'skip';
+      return false;
     }
+    return true;
+  }
+
+  function getOrLoadMap(bundlePathRaw: string): ParsedMap | 'indexed' | 'skip' {
+    if (!withinBudget()) return 'skip';
 
     let filePath = bundlePathRaw;
     if (filePath.startsWith('file://')) {
@@ -181,12 +186,14 @@ export async function resolveSourcemapsInLog(
       let nameIdx = 0;
 
       for (let l = 0; l < lineStrings.length; l++) {
+        if (!withinBudget()) return 'skip';
         const lineStr = lineStrings[l];
         const segs: Segment[] = [];
         if (lineStr) {
           let genCol = 0;
           const segStrs = lineStr.split(',');
           for (const segStr of segStrs) {
+            if (!withinBudget()) return 'skip';
             if (!segStr) continue;
             const nums = decodeVlq(segStr);
             if (nums.length === 0) continue;
@@ -235,6 +242,7 @@ export async function resolveSourcemapsInLog(
     const targetCol = genCol - 1;
     let bestSeg: Segment | null = null;
     for (const seg of segs) {
+      if (!withinBudget()) return null;
       if (seg.genCol <= targetCol) {
         bestSeg = seg;
       } else {
@@ -272,13 +280,7 @@ export async function resolveSourcemapsInLog(
         return match;
       }
 
-      if (Date.now() - startTime > budgetMs) {
-        if (!budgetExhausted) {
-          budgetExhausted = true;
-          addNote('(sourcemap resolution stopped: budget)');
-        }
-        return match;
-      }
+      if (!withinBudget()) return match;
 
       const mapResult = getOrLoadMap(file);
       if (mapResult === 'skip' || mapResult === 'indexed') {

@@ -66,6 +66,11 @@ export function renderEnvinfo(pack: CrashPack): string {
 
   let result = blocks.join('\n');
 
+  const likelyCause = pack.sections.find((s) => s.id === 'likely-cause');
+  if (likelyCause?.status === 'ok' && likelyCause.content) {
+    result += `\n\n## ${likelyCause.title}\n\n${likelyCause.content}`;
+  }
+
   // Followed by Crashpack's Logs and Git sections
   const logsSec = pack.sections.find((s) => s.id === 'logs');
   if (logsSec && logsSec.status === 'ok' && logsSec.content) {

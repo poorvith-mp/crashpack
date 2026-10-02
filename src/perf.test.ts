@@ -1,7 +1,36 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createCrashPack } from './index.js';
 
 describe('Runtime budget (B-07)', () => {
+  it('counts synchronous collector setup toward the collection deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      let settled = false;
+      const pending = createCrashPack({
+        deadlineMs: 10,
+        collectors: [{ id: 'git', title: 'Git', fn: () => {
+          vi.advanceTimersByTime(10);
+          return new Promise(() => {});
+        } }],
+      }).then(pack => { settled = true; return pack; });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled).toBe(true);
+      expect((await pending).sections[0].unavailableReason).toBe('exceeded global deadline');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears deadline timers when collectors finish', async () => {
+    vi.useFakeTimers();
+    try {
+      await createCrashPack({ only: ['logs'], stdinLog: 'Synthetic timer-cleanup log' });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   /**
    * Asserts the ceiling crashpack actually enforces, not the typical case.
    * Vitest runs files in parallel, so wall-clock here includes contention from
@@ -17,7 +46,7 @@ describe('Runtime budget (B-07)', () => {
     const pack = await createCrashPack({ cwd: process.cwd(), skip: ['docker'] });
 
     expect(Date.now() - started).toBeLessThan(6000);
-    expect(pack.sections.every((s) => s.unavailableReason !== 'exceeded global deadline')).toBe(true);
+    expect(pack.sections.filter((s) => s.unavailableReason === 'exceeded global deadline').map((s) => s.id)).toEqual([]);
   });
 
   it('degrades to unavailable rather than failing when the deadline fires', async () => {

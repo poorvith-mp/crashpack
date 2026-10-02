@@ -1,6 +1,6 @@
 {
   "name": "crashpack",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Everything your bug report needs, in one command.",
   "type": "module",
   "bin": {
@@ -67,9 +67,13 @@
     "gsap": "^3.15.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.0",
-    "vitest": "^3.0.5"
+    "vite": "7.3.6",
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "esbuild": "0.28.1"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.5.0"
   }
 }

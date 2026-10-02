@@ -1,6 +1,8 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi, afterEach } from 'vitest';
 import { renderReport } from './markdown.js';
 import { CrashPack, asRawText, SafeText } from '../types.js';
+
+afterEach(() => vi.restoreAllMocks());
 
 function makeMockPack(): CrashPack {
   return {
@@ -111,5 +113,57 @@ describe('renderReport templates', () => {
     } catch (err: any) {
       expect(err.exitCode).toBe(2);
     }
+  });
+
+  test('envinfo includes redacted findings after fixed headings and before logs without changing minimal', () => {
+    const pack = makeMockPack();
+    pack.sections.unshift({ id: 'likely-cause', title: 'Likely Cause', status: 'ok', content: '- Vite needs a supported Node version; secret=[redacted]' as SafeText, durationMs: 0 });
+    const output = renderReport(pack, 'envinfo');
+    expect(output).toContain('## Likely Cause');
+    expect(output).toContain('secret=[redacted]');
+    expect(output.indexOf('npmPackages:')).toBeLessThan(output.indexOf('## Likely Cause'));
+    expect(output.indexOf('## Likely Cause')).toBeLessThan(output.indexOf('## Logs'));
+    expect(renderReport(pack, 'minimal')).not.toContain('Likely Cause');
+    expect(renderReport(makeMockPack(), 'envinfo')).not.toContain('Likely Cause');
+  });
+});
+
+describe('render section selection', () => {
+  test.each(['default', 'minimal'])('%s respects normalized order, deduplicates, and leaves the original pack intact', (template) => {
+    const pack = makeMockPack();
+    const original = JSON.stringify(pack);
+    const output = renderReport(pack, template, [' LOGS ', 'system', 'logs']);
+    expect(output.match(/^## .+$/gm)).toEqual(['## Logs', '## System']);
+    expect(JSON.stringify(pack)).toBe(original);
+  });
+  test.each(['default', 'minimal', 'envinfo'])('%s empty allowlist has no section bodies', (template) => {
+    const output = renderReport(makeMockPack(), template, []);
+    expect(output).not.toContain('## ');
+    expect(output).not.toContain('System:');
+    expect(output).not.toContain('Database connection failed');
+  });
+  test('envinfo preserves its fixed heading order while applying the allowlist', () => {
+    const output = renderReport(makeMockPack(), 'envinfo', ['logs', 'packages', 'system']);
+    expect(output).toContain('System:');
+    expect(output).toContain('npmPackages:');
+    expect(output).toContain('## Logs');
+    expect(output).not.toContain('Binaries:');
+    expect(output).not.toContain('## Git');
+    expect(output.indexOf('System:')).toBeLessThan(output.indexOf('npmPackages:'));
+    expect(output.indexOf('npmPackages:')).toBeLessThan(output.indexOf('## Logs'));
+  });
+  test('keeps the two-argument default unchanged and includes a selected likely cause', () => {
+    const pack = makeMockPack();
+    expect(renderReport(pack, 'default', undefined)).toBe(renderReport(pack, 'default'));
+    pack.sections.unshift({ id: 'likely-cause', title: 'Likely Cause', status: 'ok', content: '- Synthetic finding' as SafeText, durationMs: 0 });
+    expect(renderReport(pack, 'default', ['likely-cause']).match(/^## .+$/gm)).toEqual(['## Likely Cause']);
+  });
+  test('ignores unknown render IDs without exposing their values in warnings', () => {
+    let stderr = '';
+    vi.spyOn(process.stderr, 'write').mockImplementation(value => { stderr += String(value); return true; });
+    const output = renderReport(makeMockPack(), 'default', ['system', 'synthetic-private-section']);
+    expect(output.match(/^## .+$/gm)).toEqual(['## System']);
+    expect(stderr).toContain('unknown');
+    expect(stderr).not.toContain('synthetic-private-section');
   });
 });
