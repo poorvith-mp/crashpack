@@ -422,7 +422,7 @@ async function generateAndOutput(options: CliArgs, extra: ExtraContext): Promise
   let savedPath: string | undefined;
   let saveFailed = false;
   const destination = options.out ?? (options.create || !isSilentMode
-    ? path.join(os.tmpdir(), `crashpack-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.md`)
+    ? path.join(os.tmpdir(), `crashpack-${options.create ? Date.now() : new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.md`)
     : undefined);
   if (destination) {
     try {

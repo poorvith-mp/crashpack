@@ -202,6 +202,21 @@ describe('requested report backups and save failures', () => {
     expect(stderr).not.toContain('REPORT SAVED');
   });
 
+  it('keeps implicit issue backups distinct within the same second', async () => {
+    const writeReal = vi.mocked(fs.writeFileSync).getMockImplementation()!;
+    vi.mocked(fs.writeFileSync).mockImplementation((file, data, options) => {
+      writeReal(path.join(dir, path.basename(String(file))), data, options);
+    });
+    const clock = vi.spyOn(Date, 'now');
+    for (const tick of [1700000000001, 1700000000002]) {
+      clock.mockReturnValue(tick);
+      expect(await runCli(args('--issue', '--create', '--json'))).toBe(0);
+      expect(fs.existsSync(path.join(dir, `crashpack-${tick}.md`))).toBe(true);
+      expect(fs.readFileSync(path.join(dir, `crashpack-${tick}.md`), 'utf8')).toMatch(/^# crashpack/);
+    }
+    expect(fs.readdirSync(dir)).toHaveLength(2);
+  });
+
   it('writes a requested issue body only once when review leaves it unchanged', async () => {
     const write = vi.spyOn(fs, 'writeFileSync');
     expect(await runCli(args('--issue', '--create', '--no-clipboard', '--out', 'local.md'))).toBe(0);
